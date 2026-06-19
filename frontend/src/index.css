@@ -1155,3 +1155,163 @@ input:checked + .switch-slider:before {
   transform: translateY(0.5px);
 }
 
+/* Traffic Dashboard Floating Chips */
+.traffic-chips-container {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+.traffic-chip {
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  padding: 6px 10px;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .traffic-chip {
+  background-color: rgba(14, 14, 17, 0.9);
+}
+
+.traffic-chip-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.traffic-chip-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Floating Traffic Toggle Card */
+.traffic-toggle-card {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+[data-theme="dark"] .traffic-toggle-card {
+  background-color: rgba(14, 14, 17, 0.9);
+}
+
+.traffic-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Color utilities for Traffic Chips */
+.red-text { color: var(--alert-red) !important; }
+.orange-text { color: var(--warning-orange) !important; }
+.green-text { color: var(--success-green) !important; }
+
+/* Pulsing blue animation for Active traffic status icon */
+.pulse-blue {
+  animation: stroke-pulse-blue 2s infinite ease-in-out;
+}
+@keyframes stroke-pulse-blue {
+  0%, 100% { color: var(--text-secondary); }
+  50% { color: var(--accent-blue); }
+}
+
+/* Bottleneck pulses and markers */
+.bottleneck-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottleneck-icon-inner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--alert-red);
+  color: white;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid white;
+  box-shadow: var(--shadow-sm);
+  z-index: 3;
+}
+
+.bottleneck-pulse {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.25);
+  animation: pulse-ring-bottleneck 2s infinite ease-out;
+  z-index: 1;
+}
+
+.bottleneck-marker.selected .bottleneck-icon-inner {
+  transform: scale(1.2);
+  border-color: var(--text-primary);
+}
+
+.bottleneck-marker.selected .bottleneck-pulse {
+  background-color: rgba(239, 68, 68, 0.4);
+  transform: scale(1.4);
+}
+
+@keyframes pulse-ring-bottleneck {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Leaflet road polyline customization styles */
+.traffic-flow-line {
+  cursor: pointer;
+  outline: none;
+  transition: stroke-width 0.1s ease, opacity 0.1s ease;
+}
+
+.traffic-flow-line:hover {
+  stroke-width: 8px !important;
+  opacity: 0.95 !important;
+}
+
+/* Glowing outline animation for active selection */
+.traffic-flow-line.selected {
+  animation: selected-flow-pulse 2s infinite ease-in-out;
+}
+
+@keyframes selected-flow-pulse {
+  0%, 100% { opacity: 0.95; }
+  50% { opacity: 0.75; }
+}
+

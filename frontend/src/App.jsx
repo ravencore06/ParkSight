@@ -164,6 +164,82 @@ const INITIAL_HOTSPOTS = [
   }
 ];
 
+// Mock road data for the premium Traffic Layer
+const TRAFFIC_ROADS = [
+  {
+    id: "R1",
+    name: "MG Road Corridor",
+    path: [[12.9785, 77.6010], [12.9801, 77.6046], [12.9805, 77.6095]],
+    speed: 18,
+    free_flow_speed: 50,
+    congestion: "orange",
+    affected_vehicles: 1240,
+    estimated_delay: 4.2,
+    nearby_hotspots: ["Safina Plaza Junction"],
+    parking_suspected: true
+  },
+  {
+    id: "R2",
+    name: "K.G. Road (Upparpet)",
+    path: [[12.9730, 77.5750], [12.9775, 77.5772], [12.9790, 77.5780]],
+    speed: 12,
+    free_flow_speed: 45,
+    congestion: "red",
+    affected_vehicles: 980,
+    estimated_delay: 5.6,
+    nearby_hotspots: ["Sagar Theatre Junction"],
+    parking_suspected: true
+  },
+  {
+    id: "R3",
+    name: "Koramangala 80ft Road",
+    path: [[12.9300, 77.6140], [12.9329, 77.6143], [12.9370, 77.6150]],
+    speed: 32,
+    free_flow_speed: 45,
+    congestion: "yellow",
+    affected_vehicles: 850,
+    estimated_delay: 2.1,
+    nearby_hotspots: ["18th Main Road, Block 2"],
+    parking_suspected: false
+  },
+  {
+    id: "R4",
+    name: "HAL Airport Road",
+    path: [[12.9570, 77.6400], [12.9592, 77.6444], [12.9610, 77.6480]],
+    speed: 7,
+    free_flow_speed: 60,
+    congestion: "dark-red",
+    affected_vehicles: 1420,
+    estimated_delay: 8.5,
+    nearby_hotspots: ["HAL Airport Exit"],
+    parking_suspected: true
+  },
+  {
+    id: "R5",
+    name: "Malleshwaram Link Road",
+    path: [[12.9960, 77.5710], [12.9984, 77.5714], [13.0010, 77.5720]],
+    speed: 48,
+    free_flow_speed: 50,
+    congestion: "green",
+    affected_vehicles: 510,
+    estimated_delay: 0.5,
+    nearby_hotspots: ["Modi Bridge Road Link"],
+    parking_suspected: false
+  },
+  {
+    id: "R6",
+    name: "Modi Hospital Road",
+    path: [[12.9840, 77.5380], [12.9863, 77.5385], [12.9890, 77.5390]],
+    speed: 24,
+    free_flow_speed: 45,
+    congestion: "orange",
+    affected_vehicles: 720,
+    estimated_delay: 3.2,
+    nearby_hotspots: ["Modi Hospital Junction"],
+    parking_suspected: true
+  }
+];
+
 // Helper to create custom DivIcon styles for Map Markers in Layer 1 & 3
 const createDivIconMarker = (hotspot, isSelected) => {
   const statusClass = hotspot.status;
@@ -182,6 +258,7 @@ const createDivIconMarker = (hotspot, isSelected) => {
 
 export default function App() {
   const [selectedHotspot, setSelectedHotspot] = useState(INITIAL_HOTSPOTS[0]);
+  const [selectedRoad, setSelectedRoad] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   
   // UI Layer, Theme and Search States
@@ -189,6 +266,7 @@ export default function App() {
   const [activeTheme, setActiveTheme] = useState('light'); // light | executive | dark
   const [searchQuery, setSearchQuery] = useState('');
   const [aiFocusMode, setAiFocusMode] = useState(false);
+  const [trafficOverlayActive, setTrafficOverlayActive] = useState(false);
 
   // Filter States
   const [filterStation, setFilterStation] = useState('ALL');
@@ -207,6 +285,9 @@ export default function App() {
   const markersRef = useRef({});
   const polylinesRef = useRef([]);
   const resourceMarkersRef = useRef([]);
+  const trafficPolylinesRef = useRef([]);
+  const bottleneckMarkersRef = useRef([]);
+  const delayZonesRef = useRef([]);
 
   // Apply Theme attribute on document.body
   useEffect(() => {
@@ -361,6 +442,14 @@ export default function App() {
     resourceMarkersRef.current.forEach(marker => marker.remove());
     resourceMarkersRef.current = [];
 
+    // 4. Clear traffic overlay elements
+    trafficPolylinesRef.current.forEach(line => line.remove());
+    trafficPolylinesRef.current = [];
+    bottleneckMarkersRef.current.forEach(m => m.remove());
+    bottleneckMarkersRef.current = [];
+    delayZonesRef.current.forEach(z => z.remove());
+    delayZonesRef.current = [];
+
     // --- RENDER LAYER 1: OPERATIONS VIEW ---
     if (activeLayer === 'operations') {
       filteredHotspots.forEach(h => {
@@ -370,8 +459,7 @@ export default function App() {
         const marker = L.marker([h.lat, h.lng], { icon })
           .addTo(mapInstance)
           .on('click', () => {
-            setSelectedHotspot(h);
-            setDrawerOpen(true);
+            handleSelectHotspot(h);
           });
 
         markersRef.current[h.id] = marker;
@@ -398,8 +486,7 @@ export default function App() {
         })
           .addTo(mapInstance)
           .on('click', () => {
-            setSelectedHotspot(h);
-            setDrawerOpen(true);
+            handleSelectHotspot(h);
           });
 
         markersRef.current[h.id] = circle;
@@ -416,8 +503,7 @@ export default function App() {
         const marker = L.marker([h.lat, h.lng], { icon })
           .addTo(mapInstance)
           .on('click', () => {
-            setSelectedHotspot(h);
-            setDrawerOpen(true);
+            handleSelectHotspot(h);
           });
 
         markersRef.current[h.id] = marker;
@@ -465,7 +551,77 @@ export default function App() {
       });
     }
 
-  }, [mapInstance, filteredHotspots, activeLayer, selectedHotspot]);
+    // --- RENDER TRAFFIC OVERLAY (Optional Overlay) ---
+    if (trafficOverlayActive) {
+      TRAFFIC_ROADS.forEach(road => {
+        const isSelected = selectedRoad && selectedRoad.id === road.id;
+        
+        // Define color based on congestion density
+        let color = 'var(--success-green)';
+        if (road.congestion === 'yellow') color = '#eab308';
+        else if (road.congestion === 'orange') color = 'var(--warning-orange)';
+        else if (road.congestion === 'red') color = 'var(--alert-red)';
+        else if (road.congestion === 'dark-red') color = '#991b1b';
+
+        // 1. Draw Flow Line
+        const polyline = L.polyline(road.path, {
+          color: color,
+          weight: isSelected ? 8 : 4.5,
+          opacity: isSelected ? 0.95 : 0.75,
+          className: `traffic-flow-line ${road.congestion} ${isSelected ? 'selected' : ''}`
+        })
+        .addTo(mapInstance)
+        .on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          handleSelectRoad(road);
+        });
+
+        trafficPolylinesRef.current.push(polyline);
+
+        // 2. Draw Bottleneck Indicator (Pulsing marker)
+        if (road.parking_suspected && (road.congestion === 'red' || road.congestion === 'dark-red' || road.congestion === 'orange')) {
+          const midPoint = road.path[Math.floor(road.path.length / 2)];
+          
+          const icon = L.divIcon({
+            className: `bottleneck-marker ${isSelected ? 'selected' : ''}`,
+            html: `
+              <div class="bottleneck-pulse"></div>
+              <div class="bottleneck-icon-inner">⚠️</div>
+            `,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          });
+
+          const marker = L.marker(midPoint, { icon })
+            .addTo(mapInstance)
+            .on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              handleSelectRoad(road);
+            });
+
+          bottleneckMarkersRef.current.push(marker);
+        }
+
+        // 3. Draw Delay Zone (Soft glow circle overlay)
+        if (road.congestion === 'red' || road.congestion === 'dark-red') {
+          const midPoint = road.path[Math.floor(road.path.length / 2)];
+          const circle = L.circle(midPoint, {
+            radius: 200, // meters
+            color: color,
+            fillColor: color,
+            fillOpacity: isSelected ? 0.12 : 0.05,
+            weight: 1,
+            dashArray: '3, 6',
+            className: 'traffic-delay-zone'
+          })
+          .addTo(mapInstance);
+          
+          delayZonesRef.current.push(circle);
+        }
+      });
+    }
+
+  }, [mapInstance, filteredHotspots, activeLayer, selectedHotspot, trafficOverlayActive, selectedRoad]);
 
   const resetAllFilters = () => {
     setMinCis(0.0);
@@ -475,10 +631,19 @@ export default function App() {
     setSearchQuery('');
     setAiFocusMode(false);
     setOptimizationTriggered(false);
+    setTrafficOverlayActive(false);
+    setSelectedRoad(null);
   };
 
   const handleSelectHotspot = (h) => {
     setSelectedHotspot(h);
+    setSelectedRoad(null);
+    setDrawerOpen(true);
+  };
+
+  const handleSelectRoad = (r) => {
+    setSelectedRoad(r);
+    setSelectedHotspot(null);
     setDrawerOpen(true);
   };
 
@@ -816,6 +981,43 @@ export default function App() {
           {/* Map canvas container */}
           <div ref={mapContainerRef} className="map-container-leaflet" />
 
+          {/* Traffic Dashboard floating chips above the map */}
+          <div className="traffic-chips-container">
+            <div className="traffic-chip">
+              <span className="traffic-chip-label">Avg Network Speed</span>
+              <span className="traffic-chip-value mono">24.8 km/h</span>
+            </div>
+            <div className="traffic-chip">
+              <span className="traffic-chip-label">Critical Corridor</span>
+              <span className="traffic-chip-value red-text">HAL Airport Rd</span>
+            </div>
+            <div className="traffic-chip">
+              <span className="traffic-chip-label">High Delay Zone</span>
+              <span className="traffic-chip-value orange-text">K.G. Road (+5.6m)</span>
+            </div>
+          </div>
+
+          {/* Floating Traffic Overlay Control Toggle */}
+          <div className="traffic-toggle-card">
+            <div className="traffic-toggle-label">
+              <Activity size={12} className={trafficOverlayActive ? "pulse-blue" : ""} />
+              <span>Traffic Flow Layer</span>
+            </div>
+            <label className="switch">
+              <input 
+                type="checkbox" 
+                checked={trafficOverlayActive}
+                onChange={(e) => {
+                  setTrafficOverlayActive(e.target.checked);
+                  if (!e.target.checked) {
+                    setSelectedRoad(null);
+                  }
+                }}
+              />
+              <span className="switch-slider"></span>
+            </label>
+          </div>
+
           {/* AI Focus Floating banner */}
           {aiFocusMode && (
             <div className="ai-impact-overlay-banner">
@@ -828,6 +1030,35 @@ export default function App() {
 
           {/* Floating Map Legend */}
           <div className="map-legend-floating">
+            {trafficOverlayActive && (
+              <div className="legend-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', marginBottom: '6px' }}>
+                <span className="legend-section-title" style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Traffic Flow</span>
+                <div className="legend-row">
+                  <span className="legend-dot" style={{ backgroundColor: '#991b1b' }} />
+                  <span>Critical (&lt; 12 km/h)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot critical" />
+                  <span>Severe (12-20 km/h)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot orange" />
+                  <span>Heavy (20-30 km/h)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot" style={{ backgroundColor: '#eab308' }} />
+                  <span>Moderate (30-40 km/h)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot green" />
+                  <span>Free Flow (&gt; 40 km/h)</span>
+                </div>
+              </div>
+            )}
+            
+            <span className="legend-section-title" style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
+              {activeLayer === 'congestion' ? 'Congestion Capacity' : 'Hotspot Urgency'}
+            </span>
             {activeLayer === 'congestion' ? (
               <>
                 <div className="legend-row">
@@ -866,7 +1097,7 @@ export default function App() {
           </div>
 
           {/* Slide-over detail drawer */}
-          <aside className={`slide-over-drawer ${drawerOpen && selectedHotspot ? 'open' : ''}`}>
+          <aside className={`slide-over-drawer ${(drawerOpen && (selectedHotspot || selectedRoad)) ? 'open' : ''}`}>
             {selectedHotspot && (
               <>
                 <div className="drawer-header">
@@ -1011,6 +1242,119 @@ export default function App() {
                     </div>
                   )}
 
+                </div>
+              </>
+            )}
+
+            {selectedRoad && (
+              <>
+                <div className="drawer-header">
+                  <div className="drawer-header-left">
+                    <h2 className="drawer-title">{selectedRoad.name}</h2>
+                    <span className="drawer-subtitle">Traffic Flow Corridor</span>
+                  </div>
+                  <button className="drawer-close-btn" onClick={() => setDrawerOpen(false)}>
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="drawer-content">
+                  {/* ParkSight Intelligence Overlap alert */}
+                  {selectedRoad.parking_suspected ? (
+                    <div className="drawer-action-banner critical" style={{ borderLeftWidth: '3px' }}>
+                      <span className="action-label-small" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertTriangle size={11} />
+                        Parking-Induced Congestion Suspected
+                      </span>
+                      <p className="action-text-detail">
+                        Severe vehicle bottlenecking correlates directly with active nearby illegal parking hotspot ({selectedRoad.nearby_hotspots.join(', ')}). Enforcement recommended to restore road throughput capacity.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="drawer-action-banner" style={{ borderLeftWidth: '3px', borderLeftColor: 'var(--success-green)', backgroundColor: 'var(--success-green-light)' }}>
+                      <span className="action-label-small" style={{ color: 'var(--success-green)' }}>Standard Flow</span>
+                      <p className="action-text-detail" style={{ color: 'var(--text-primary)' }}>
+                        Traffic is moving within normal spatiotemporal parameters. No major parking obstacles detected.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Road Parameters Grid */}
+                  <div>
+                    <h3 className="drawer-section-title">Corridor Parameters</h3>
+                    <div className="detail-stats-grid">
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Average Speed</span>
+                        <span className="detail-stat-value mono">{selectedRoad.speed} km/h</span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Congestion Level</span>
+                        <span className={`detail-stat-value capitalize font-semibold ${selectedRoad.congestion === 'red' || selectedRoad.congestion === 'dark-red' ? 'red-text' : selectedRoad.congestion === 'orange' ? 'orange-text' : 'green-text'}`}>
+                          {selectedRoad.congestion === 'dark-red' ? 'Critical' : selectedRoad.congestion === 'red' ? 'Severe' : selectedRoad.congestion === 'orange' ? 'Heavy' : selectedRoad.congestion === 'yellow' ? 'Moderate' : 'Free Flow'}
+                        </span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Estimated Delay</span>
+                        <span className="detail-stat-value mono">{selectedRoad.estimated_delay} min</span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Affected Load</span>
+                        <span className="detail-stat-value mono">{selectedRoad.affected_vehicles}/hr</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nearby Hotspots Link List */}
+                  <div>
+                    <h3 className="drawer-section-title">Linked Hotspots ({selectedRoad.nearby_hotspots.length})</h3>
+                    <div className="sim-drawer-card" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 12px' }}>
+                      {selectedRoad.nearby_hotspots.map((name, i) => {
+                        const hs = INITIAL_HOTSPOTS.find(h => h.name === name);
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                            <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{name}</span>
+                            {hs ? (
+                              <button 
+                                className="section-action" 
+                                style={{ fontSize: '10px', padding: '2px 6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px' }} 
+                                onClick={() => handleSelectHotspot(hs)}
+                              >
+                                Inspect Hotspot
+                              </button>
+                            ) : (
+                              <span className="mono" style={{ color: 'var(--text-muted)' }}>Inactive</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Recharts chart: Speed Comparison */}
+                  <div>
+                    <h3 className="drawer-section-title">Speed vs Design Threshold</h3>
+                    <div style={{ width: '100%', height: 120 }}>
+                      <ResponsiveContainer>
+                        <BarChart 
+                          data={[
+                            { name: 'Current Speed', speed: selectedRoad.speed },
+                            { name: 'Free Flow Speed', speed: selectedRoad.free_flow_speed }
+                          ]} 
+                          layout="vertical"
+                          margin={{ top: 5, right: 10, left: -25, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={true} vertical={false} />
+                          <XAxis type="number" hide={true} />
+                          <YAxis dataKey="name" type="category" style={{ fontSize: 9, fontWeight: 500 }} />
+                          <Tooltip 
+                            contentStyle={{ fontSize: 10, border: '1px solid var(--border-color)', borderRadius: 6 }} 
+                            formatter={(value) => [`${value} km/h`, 'Speed']}
+                          />
+                          <Bar dataKey="speed" fill={selectedRoad.congestion === 'green' ? 'var(--success-green)' : selectedRoad.congestion === 'yellow' ? '#eab308' : selectedRoad.congestion === 'orange' ? 'var(--warning-orange)' : 'var(--alert-red)'} radius={[0, 4, 4, 0]} barSize={12} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
