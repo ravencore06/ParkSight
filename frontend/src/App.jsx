@@ -530,10 +530,13 @@ export default function App() {
       {/* Redesigned Header: Brand, Search, Switchers, Profile */}
       <header className="app-header">
         <div className="brand">
-          <div className="brand-logo">
-            <Activity size={18} strokeWidth={2.5} />
+          <div className="brand-logo" style={{ display: 'flex', alignItems: 'center' }}>
+            <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '2px' }}>
+              <ellipse cx="24" cy="24" rx="20" ry="6" stroke="#90caf9" stroke-width="3" fill="none" transform="rotate(-18, 24, 24)" />
+              <path d="M18,10 h12 c4.5,0 8,3 8,8 s-3.5,8 -8,8 h-6 v12 h-6 V10 z M24,15 v6 h6 c1.5,0 2.5,-1 2.5,-3 s-1,-3 -2.5,-3 h-6 z" fill="#0072f5" />
+            </svg>
           </div>
-          <span className="brand-name">PARKSIGHT</span>
+          <span className="brand-name" style={{ fontSize: '1.05rem', fontWeight: '700', letterSpacing: '-0.02em' }}>ParkSight</span>
           <span className="brand-slogan font-mono">DETECT. PRIORITIZE. OPTIMIZE.</span>
         </div>
 
