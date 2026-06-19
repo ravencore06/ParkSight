@@ -355,6 +355,24 @@ export default function App() {
     };
   }, [filteredHotspots, complianceFactor]);
 
+  // Automatically sync/update selected hotspot details inside side panel when filters change
+  useEffect(() => {
+    if (filteredHotspots.length > 0) {
+      // Check if current selectedHotspot is still inside the newly filtered hotspots
+      const isStillFiltered = selectedHotspot && filteredHotspots.some(h => h.id === selectedHotspot.id);
+      if (!isStillFiltered || selectedRoad) {
+        // Switch side panel to display the top priority hotspot for the new filter/jurisdiction
+        setSelectedHotspot(filteredHotspots[0]);
+        setSelectedRoad(null);
+        setDrawerOpen(true);
+      }
+    } else {
+      setSelectedHotspot(null);
+      setSelectedRoad(null);
+      setDrawerOpen(false);
+    }
+  }, [filteredHotspots]);
+
   // Leaflet Map Initialization
   useEffect(() => {
     let map;
