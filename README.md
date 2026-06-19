@@ -5,7 +5,7 @@ PARKSIGHT is an AI-powered Parking Intelligence and Traffic Operations Command C
 
 ---
 
-## 🛰️ Core Modules & Algorithms
+## Core Modules & Algorithms
 
 1.  **Spatio-Temporal Hotspot Classifier (ST-DBSCAN)**:
     *   Instead of static density heatmaps, the system clusters 298,450 historical violation coordinates into **214 chronic hotspots** using Density-Based Spatial Clustering (DBSCAN), separating transient stops from persistent bottlenecks.
@@ -26,7 +26,7 @@ PARKSIGHT is an AI-powered Parking Intelligence and Traffic Operations Command C
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```mermaid
 graph TD
@@ -54,7 +54,7 @@ graph TD
 
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 ravencore06/ParkSight (Git Root)
@@ -80,7 +80,7 @@ ravencore06/ParkSight (Git Root)
 
 ---
 
-## 🚀 Local Setup Guide
+## Local Setup Guide
 
 ### 1. Run the Frontend (React + Vite)
 Ensure you have [Node.js](https://nodejs.org/) installed:
@@ -103,7 +103,7 @@ python preprocess_and_train.py
 
 ---
 
-## 🌐 Production Deployment (Vercel)
+##  Production Deployment (Vercel)
 
 This repository is optimized for automated **Vercel** deployments. To host the frontend, configure the following setting in Vercel:
 
