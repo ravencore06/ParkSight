@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Shield, 
   MapPin, 
@@ -7,29 +7,34 @@ import {
   TrendingUp, 
   Users, 
   Truck, 
-  Database, 
-  FileText, 
   Activity, 
   Sliders, 
-  RefreshCw,
-  BarChart2,
+  RotateCcw,
   ChevronRight,
-  TrendingDown,
-  Info
+  X,
+  Navigation,
+  AlertCircle,
+  Search,
+  Eye,
+  Settings,
+  Flame,
+  Zap
 } from 'lucide-react';
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
   LineChart,
-  Line
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
 } from 'recharts';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Mock Hotspots data using 3-color status mappings: critical (red), active (blue), low (neutral)
+// Spatiotemporal Hotspots in Bangalore mapping
 const INITIAL_HOTSPOTS = [
   {
     id: 1,
@@ -43,10 +48,10 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 18500,
     co2_impact: 145,
     vehicle_mix: "CAR (45%), TANKER (15%), SCOOTER (40%)",
-    action: "Immediate Towing",
-    x: 420,
-    y: 190,
-    size: 14,
+    action: "Tow Immediately",
+    expected_improvement: 42,
+    lat: 12.9801,
+    lng: 77.6046,
     status: "critical" // Red
   },
   {
@@ -61,10 +66,10 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 14600,
     co2_impact: 110,
     vehicle_mix: "CAR (30%), LGV (25%), SCOOTER (45%)",
-    action: "Deploy 2 Officers",
-    x: 230,
-    y: 280,
-    size: 12,
+    action: "Deploy Officers",
+    expected_improvement: 24,
+    lat: 12.9775,
+    lng: 77.5772,
     status: "active" // Blue
   },
   {
@@ -79,10 +84,10 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 11200,
     co2_impact: 85,
     vehicle_mix: "CAR (65%), SCOOTER (35%)",
-    action: "Routine Patrol",
-    x: 600,
-    y: 430,
-    size: 10,
+    action: "Deploy Officers",
+    expected_improvement: 18,
+    lat: 12.9329,
+    lng: 77.6143,
     status: "active" // Blue
   },
   {
@@ -97,15 +102,15 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 8900,
     co2_impact: 68,
     vehicle_mix: "CAR (25%), PASSENGER AUTO (40%), SCOOTER (35%)",
-    action: "Deploy 1 Officer",
-    x: 180,
-    y: 130,
-    size: 10,
+    action: "Deploy Officers",
+    expected_improvement: 15,
+    lat: 12.9863,
+    lng: 77.5385,
     status: "active" // Blue
   },
   {
     id: 5,
-    name: "HAL Old Airport Road exit",
+    name: "HAL Airport Exit",
     jurisdiction: "HAL Old Airport",
     violations: 49,
     cis: 9.2,
@@ -115,15 +120,15 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 21500,
     co2_impact: 165,
     vehicle_mix: "CAR (55%), MAXI-CAB (20%), SCOOTER (25%)",
-    action: "Immediate Towing",
-    x: 720,
-    y: 320,
-    size: 16,
+    action: "Tow Immediately",
+    expected_improvement: 38,
+    lat: 12.9592,
+    lng: 77.6444,
     status: "critical" // Red
   },
   {
     id: 6,
-    name: "KR Market main gate",
+    name: "KR Market Main Gate",
     jurisdiction: "City Market",
     violations: 33,
     cis: 8.1,
@@ -133,15 +138,15 @@ const INITIAL_HOTSPOTS = [
     economic_cost: 13200,
     co2_impact: 102,
     vehicle_mix: "GOODS AUTO (40%), PRIVATE BUS (30%), SCOOTER (30%)",
-    action: "Deploy 2 Officers",
-    x: 300,
-    y: 370,
-    size: 11,
+    action: "Deploy Officers",
+    expected_improvement: 22,
+    lat: 12.9667,
+    lng: 77.5750,
     status: "active" // Blue
   },
   {
     id: 7,
-    name: "Modi Bridge Road link",
+    name: "Modi Bridge Road Link",
     jurisdiction: "Malleshwaram",
     violations: 18,
     cis: 6.2,
@@ -152,46 +157,92 @@ const INITIAL_HOTSPOTS = [
     co2_impact: 42,
     vehicle_mix: "CAR (40%), SCOOTER (60%)",
     action: "Routine Patrol",
-    x: 350,
-    y: 90,
-    size: 8,
+    expected_improvement: 8,
+    lat: 12.9984,
+    lng: 77.5714,
     status: "neutral" // Grey
   }
 ];
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('map');
-  const [selectedHotspot, setSelectedHotspot] = useState(INITIAL_HOTSPOTS[0]);
+// Helper to create custom DivIcon styles for Map Markers in Layer 1 & 3
+const createDivIconMarker = (hotspot, isSelected) => {
+  const statusClass = hotspot.status;
+  const selectedClass = isSelected ? 'selected' : '';
   
-  // Toolbar Filter States
+  return L.divIcon({
+    className: `custom-map-marker ${statusClass} ${selectedClass}`,
+    html: `
+      <div class="marker-ring"></div>
+      <div class="marker-inner"></div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+};
+
+export default function App() {
+  const [selectedHotspot, setSelectedHotspot] = useState(INITIAL_HOTSPOTS[0]);
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  
+  // UI Layer, Theme and Search States
+  const [activeLayer, setActiveLayer] = useState('operations'); // operations | congestion | enforcement
+  const [activeTheme, setActiveTheme] = useState('light'); // light | executive | dark
+  const [searchQuery, setSearchQuery] = useState('');
+  const [aiFocusMode, setAiFocusMode] = useState(false);
+
+  // Filter States
   const [filterStation, setFilterStation] = useState('ALL');
   const [filterVehicle, setFilterVehicle] = useState('ALL');
   const [minCis, setMinCis] = useState(0.0);
   
-  // Resource Optimizer States
+  // Simulation / Patrol optimization states
   const [complianceRate, setComplianceRate] = useState(0);
   const [optimizationTriggered, setOptimizationTriggered] = useState(false);
   const [dispatchRoutes, setDispatchRoutes] = useState([]);
 
-  // Interactive Zoom & Pan States
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // Map DOM and Leaflet instance references
+  const mapContainerRef = useRef(null);
+  const leafletMapRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const markersRef = useRef({});
+  const polylinesRef = useRef([]);
+  const resourceMarkersRef = useRef([]);
 
-  // Filter Data
+  // Apply Theme attribute on document.body
+  useEffect(() => {
+    document.body.setAttribute('data-theme', activeTheme);
+  }, [activeTheme]);
+
+  // Dynamic Map filter compilation
   const filteredHotspots = useMemo(() => {
+    // If AI Focus mode is on, override normal filters to highlight top 5 highest-CIS hotspots
+    if (aiFocusMode) {
+      return [...INITIAL_HOTSPOTS]
+        .sort((a, b) => b.cis - a.cis)
+        .slice(0, 5);
+    }
+
     return INITIAL_HOTSPOTS.filter(h => {
+      // Station filter
       if (filterStation !== 'ALL' && h.jurisdiction !== filterStation) return false;
-      if (minCis > 0 && h.cis < minCis) return false;
+      // Vehicle type filter
       if (filterVehicle !== 'ALL' && !h.vehicle_mix.toLowerCase().includes(filterVehicle.toLowerCase())) return false;
+      // CIS slider
+      if (h.cis < minCis) return false;
+      // Search bar filter
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        const matchName = h.name.toLowerCase().includes(query);
+        const matchDiv = h.jurisdiction.toLowerCase().includes(query);
+        if (!matchName && !matchDiv) return false;
+      }
       return true;
     });
-  }, [filterStation, filterVehicle, minCis]);
+  }, [filterStation, filterVehicle, minCis, searchQuery, aiFocusMode]);
 
   const complianceFactor = (100 - complianceRate) / 100.0;
 
-  // Header Summary Metrics
+  // Header & sidebar summary aggregates
   const summaryMetrics = useMemo(() => {
     const activeCount = filteredHotspots.length;
     const criticalCount = filteredHotspots.filter(h => h.status === 'critical').length;
@@ -202,22 +253,228 @@ export default function App() {
     const avgCapacityLoss = activeCount > 0 
       ? (filteredHotspots.reduce((sum, h) => sum + h.capacity_loss, 0) / activeCount) * complianceFactor
       : 0;
+    const totalCost = filteredHotspots.reduce((sum, h) => sum + h.economic_cost, 0) * complianceFactor;
       
     return {
       activeCount,
       criticalCount,
       avgCis: parseFloat(avgCis.toFixed(1)),
       totalDelay: Math.round(totalDelay),
-      avgCapacityLoss: Math.round(avgCapacityLoss)
+      avgCapacityLoss: Math.round(avgCapacityLoss),
+      totalCost: Math.round(totalCost)
     };
   }, [filteredHotspots, complianceFactor]);
 
-  const resetAll = () => {
+  // Leaflet Map Initialization
+  useEffect(() => {
+    if (!leafletMapRef.current && mapContainerRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: false
+      }).setView([12.9716, 77.5946], 13);
+      
+      // Reposition default zoom controls to bottom-left
+      L.control.zoom({
+        position: 'bottomleft'
+      }).addTo(map);
+
+      leafletMapRef.current = map;
+    }
+
+    return () => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+    };
+  }, []);
+
+  // Sync Leaflet base tiles dynamically based on activeTheme (Light Positron vs Dark Matter)
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+    }
+
+    const tileUrl = activeTheme === 'dark'
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+    tileLayerRef.current = L.tileLayer(tileUrl, {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
+  }, [activeTheme]);
+
+  // Handle map centering and pan transitions
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map || !selectedHotspot) return;
+
+    map.panTo([selectedHotspot.lat, selectedHotspot.lng], {
+      animate: true,
+      duration: 0.6
+    });
+  }, [selectedHotspot]);
+
+  // Handle AI Focus bounds fitting
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    if (aiFocusMode) {
+      const top5 = [...INITIAL_HOTSPOTS].sort((a, b) => b.cis - a.cis).slice(0, 5);
+      const bounds = L.latLngBounds(top5.map(h => [h.lat, h.lng]));
+      map.fitBounds(bounds, {
+        padding: [60, 60],
+        maxZoom: 14,
+        animate: true,
+        duration: 0.8
+      });
+      // Auto inspect highest-CIS hotspot
+      setSelectedHotspot(top5[0]);
+      setDrawerOpen(true);
+    }
+  }, [aiFocusMode]);
+
+  // Render markers and layers (Layer 1: Ops, Layer 2: Congestion, Layer 3: Resources)
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    // 1. Clear standard incident markers
+    Object.values(markersRef.current).forEach(marker => marker.remove());
+    markersRef.current = {};
+
+    // 2. Clear route polylines from Layer 3
+    polylinesRef.current.forEach(line => line.remove());
+    polylinesRef.current = [];
+
+    // 3. Clear resources markers from Layer 3
+    resourceMarkersRef.current.forEach(marker => marker.remove());
+    resourceMarkersRef.current = [];
+
+    // --- RENDER LAYER 1: OPERATIONS VIEW ---
+    if (activeLayer === 'operations') {
+      filteredHotspots.forEach(h => {
+        const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+        const icon = createDivIconMarker(h, isSelected);
+
+        const marker = L.marker([h.lat, h.lng], { icon })
+          .addTo(map)
+          .on('click', () => {
+            setSelectedHotspot(h);
+            setDrawerOpen(true);
+          });
+
+        markersRef.current[h.id] = marker;
+      });
+    }
+
+    // --- RENDER LAYER 2: CONGESTION INTELLIGENCE VIEW ---
+    if (activeLayer === 'congestion') {
+      filteredHotspots.forEach(h => {
+        // Red color gradient depending on capacity loss percentage
+        let color = 'var(--success-green)'; // Healthy
+        if (h.capacity_loss >= 40) color = 'var(--alert-red)'; // Critical
+        else if (h.capacity_loss >= 30) color = 'var(--warning-orange)'; // High
+        else if (h.capacity_loss >= 20) color = '#eab308'; // Moderate
+
+        const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+        // Visual circles representing delay clusters
+        const circle = L.circleMarker([h.lat, h.lng], {
+          color: color,
+          fillColor: color,
+          fillOpacity: isSelected ? 0.65 : 0.4,
+          weight: isSelected ? 3 : 1.5,
+          radius: 12 + (h.capacity_loss / 3) // Sized based on capacity loss
+        })
+          .addTo(map)
+          .on('click', () => {
+            setSelectedHotspot(h);
+            setDrawerOpen(true);
+          });
+
+        markersRef.current[h.id] = circle;
+      });
+    }
+
+    // --- RENDER LAYER 3: ENFORCEMENT PLANNING VIEW ---
+    if (activeLayer === 'enforcement') {
+      // Render target hotspots
+      filteredHotspots.forEach(h => {
+        const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+        const icon = createDivIconMarker(h, isSelected);
+
+        const marker = L.marker([h.lat, h.lng], { icon })
+          .addTo(map)
+          .on('click', () => {
+            setSelectedHotspot(h);
+            setDrawerOpen(true);
+          });
+
+        markersRef.current[h.id] = marker;
+      });
+
+      // Mock coordinates for Officers (Blue) and Tow trucks (Orange)
+      const officers = [
+        { id: 'O1', lat: 12.9820, lng: 77.6010, type: 'officer', label: 'P-12' },
+        { id: 'O2', lat: 12.9750, lng: 77.5810, type: 'officer', label: 'P-05' }
+      ];
+
+      const tows = [
+        { id: 'T1', lat: 12.9560, lng: 77.6410, type: 'tow', label: 'TOW-01' },
+        { id: 'T2', lat: 12.9690, lng: 77.5710, type: 'tow', label: 'TOW-02' }
+      ];
+
+      // Draw Officer and Tow markers
+      [...officers, ...tows].forEach(r => {
+        const icon = L.divIcon({
+          className: `custom-resource-marker ${r.type}`,
+          html: `<span style="font-size: 8px; font-weight: 700;">${r.label}</span>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
+        });
+
+        const marker = L.marker([r.lat, r.lng], { icon }).addTo(map);
+        resourceMarkersRef.current.push(marker);
+      });
+
+      // Draw optimized patrol route lines connecting officers to target junctions
+      const routes = [
+        { from: [12.9820, 77.6010], to: [12.9801, 77.6046], color: 'var(--accent-blue)' }, // Officer 1 to Safina Plaza
+        { from: [12.9750, 77.5810], to: [12.9775, 77.5772], color: 'var(--accent-blue)' }, // Officer 2 to Sagar Theatre
+        { from: [12.9560, 77.6410], to: [12.9592, 77.6444], color: 'var(--warning-orange)' } // Tow Truck 1 to HAL
+      ];
+
+      routes.forEach(route => {
+        const line = L.polyline([route.from, route.to], {
+          color: route.color,
+          weight: 2,
+          dashArray: '5, 5',
+          opacity: 0.8
+        }).addTo(map);
+        polylinesRef.current.push(line);
+      });
+    }
+
+  }, [filteredHotspots, activeLayer, selectedHotspot]);
+
+  const resetAllFilters = () => {
     setMinCis(0.0);
     setFilterStation('ALL');
     setFilterVehicle('ALL');
     setComplianceRate(0);
+    setSearchQuery('');
+    setAiFocusMode(false);
     setOptimizationTriggered(false);
+  };
+
+  const handleSelectHotspot = (h) => {
+    setSelectedHotspot(h);
+    setDrawerOpen(true);
   };
 
   const triggerOptimization = () => {
@@ -225,536 +482,547 @@ export default function App() {
     const sorted = [...filteredHotspots].sort((a, b) => b.cis - a.cis);
     const routes = [];
     if (sorted.length > 0) {
-      routes.push({ unit: "Patrol Team Alpha", target: sorted[0].name, action: sorted[0].action });
+      routes.push({ unit: "Patrol Alpha", target: sorted[0].name, action: sorted[0].action, code: "P-12" });
     }
     if (sorted.length > 1) {
-      routes.push({ unit: "Patrol Team Beta", target: sorted[1].name, action: sorted[1].action });
+      routes.push({ unit: "Patrol Beta", target: sorted[1].name, action: sorted[1].action, code: "P-05" });
     }
     if (sorted.length > 2) {
-      routes.push({ unit: "Tow Unit 01", target: sorted[0].name, action: "Tow Immediately" });
-    }
-    if (sorted.length > 3) {
-      routes.push({ unit: "Tow Unit 02", target: sorted[1].name, action: "Clear Blockage" });
+      routes.push({ unit: "Tow Unit 01", target: sorted[2].name, action: "Tow Vehicle", code: "TOW-01" });
     }
     setDispatchRoutes(routes);
   };
 
-  // Drag & Zoom Event Handlers
-  const handleMouseDown = (e) => {
-    if (e.button !== 0) return; // Only drag with left click
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const zoomFactor = 1.1;
-    let newZoom = zoom;
-    if (e.deltaY < 0) {
-      newZoom = Math.min(zoom * zoomFactor, 4.0); // limit 4x zoom in
-    } else {
-      newZoom = Math.max(zoom / zoomFactor, 0.8); // limit 0.8x zoom out
-    }
-    setZoom(newZoom);
-  };
-
-  const zoomIn = () => setZoom(prev => Math.min(prev * 1.2, 4.0));
-  const zoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.8));
-  const resetZoom = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
-  // Recharts Data mapping
-  const trendData = [
+  // Recharts trend data
+  const trendData = useMemo(() => [
     { name: '08:00', CIS: 7.2 },
-    { name: '10:00', CIS: 9.6 },
+    { name: '10:00', CIS: parseFloat((selectedHotspot ? selectedHotspot.cis : 9.6).toFixed(1)) },
     { name: '12:00', CIS: 8.1 },
     { name: '14:00', CIS: 7.4 },
     { name: '16:00', CIS: 8.7 },
     { name: '18:00', CIS: 9.2 },
     { name: '20:00', CIS: 7.9 }
-  ];
+  ], [selectedHotspot]);
+
+  // Recharts vehicle mix breakdown
+  const barChartData = useMemo(() => {
+    if (!selectedHotspot) return [];
+    const parts = selectedHotspot.vehicle_mix.split(', ');
+    return parts.map(p => {
+      const match = p.match(/([A-Z\s-]+)\s*\((\d+)%\)/);
+      if (match) {
+        return {
+          name: match[1].trim(),
+          percentage: parseInt(match[2])
+        };
+      }
+      return { name: p, percentage: 0 };
+    });
+  }, [selectedHotspot]);
 
   return (
     <div className="app-container">
-      {/* 1. Brand Header */}
+      {/* Redesigned Header: Brand, Search, Switchers, Profile */}
       <header className="app-header">
         <div className="brand">
-          <div className="brand-dot" />
+          <div className="brand-logo">
+            <Activity size={18} strokeWidth={2.5} />
+          </div>
           <span className="brand-name">PARKSIGHT</span>
-          <span className="tagline font-mono">OPERATIONAL INTELLIGENCE</span>
+          <span className="brand-slogan font-mono">DETECT. PRIORITIZE. OPTIMIZE.</span>
         </div>
 
-        {/* Actionable Compact Status Pills */}
-        <div className="status-ticker">
-          <div className="ticker-item">
-            <span className="dot-indicator dot-red" />
-            <span>Critical Hotspots:</span>
-            <span className="ticker-value mono">{summaryMetrics.criticalCount}</span>
+        {/* Middle Global Search */}
+        <div className="header-middle">
+          <div className="search-box">
+            <Search size={14} className="search-icon-svg" />
+            <input 
+              type="text" 
+              placeholder="Search junctions or divisions..." 
+              className="search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
-          <div className="ticker-item">
-            <span className="dot-indicator dot-blue" />
-            <span>Avg CIS Impact:</span>
-            <span className="ticker-value mono">{summaryMetrics.avgCis}</span>
+        </div>
+
+        {/* Right Switchers & Profiles */}
+        <div className="header-right">
+          {/* 3 Map Layers segmented switcher */}
+          <div className="segmented-control">
+            <button 
+              className={`segmented-btn ${activeLayer === 'operations' ? 'active' : ''}`}
+              onClick={() => setActiveLayer('operations')}
+              title="Daily Traffic Operations View"
+            >
+              <Eye size={12} />
+              <span>Operations</span>
+            </button>
+            <button 
+              className={`segmented-btn ${activeLayer === 'congestion' ? 'active' : ''}`}
+              onClick={() => setActiveLayer('congestion')}
+              title="Congestion Traffic Analysis Heatmap"
+            >
+              <Flame size={12} />
+              <span>Congestion</span>
+            </button>
+            <button 
+              className={`segmented-btn ${activeLayer === 'enforcement' ? 'active' : ''}`}
+              onClick={() => setActiveLayer('enforcement')}
+              title="Enforcement Planning Resource Router"
+            >
+              <Navigation size={12} />
+              <span>Enforcement</span>
+            </button>
           </div>
-          <div className="ticker-item">
-            <span className="dot-indicator dot-grey" />
-            <span>Traffic Delay:</span>
-            <span className="ticker-value mono">{summaryMetrics.totalDelay.toLocaleString()} min/h</span>
+
+          {/* 3 Themes Switcher */}
+          <div className="segmented-control">
+            <button 
+              className={`segmented-btn ${activeTheme === 'light' ? 'active' : ''}`}
+              onClick={() => setActiveTheme('light')}
+              title="Operations Light Theme"
+            >
+              <span>Light</span>
+            </button>
+            <button 
+              className={`segmented-btn ${activeTheme === 'executive' ? 'active' : ''}`}
+              onClick={() => setActiveTheme('executive')}
+              title="Executive Review Theme"
+            >
+              <span>Executive</span>
+            </button>
+            <button 
+              className={`segmented-btn ${activeTheme === 'dark' ? 'active' : ''}`}
+              onClick={() => setActiveTheme('dark')}
+              title="Analytics Dark Theme"
+            >
+              <span>Dark</span>
+            </button>
+          </div>
+
+          <div className="profile-avatar" title="Senior Traffic Commander">
+            <span>ST</span>
           </div>
         </div>
       </header>
 
-      {/* 2. Split Workspace */}
+      {/* Main Split Layout */}
       <div className="workspace">
         
-        {/* LEFT COLUMN: Focus Area (Header, Toolbar, Content) */}
-        <div className="main-content">
+        {/* Left Control Sidebar */}
+        <aside className="left-sidebar">
           
-          <div className="content-header">
-            {/* Vercel-style Tab Row */}
-            <div className="tabs-row">
-              <div className="tabs">
-                <button className={`header-tab ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')}>
-                  Map View
-                </button>
-                <button className={`header-tab ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-                  Hotspot Analytics
-                </button>
-                <button className={`header-tab ${activeTab === 'simulation' ? 'active' : ''}`} onClick={() => setActiveTab('simulation')}>
-                  Simulator Tab
-                </button>
+          {/* Section 1: Filters */}
+          <div className="sidebar-section">
+            <div className="section-header">
+              <span className="section-title">Control Filters</span>
+              <button className="section-action" onClick={resetAllFilters}>Reset</button>
+            </div>
+            
+            <div className="filters-grid">
+              <div className="filter-control">
+                <span className="filter-label">Jurisdiction</span>
+                <select 
+                  className="select-minimal" 
+                  value={filterStation} 
+                  onChange={(e) => setFilterStation(e.target.value)}
+                  disabled={aiFocusMode}
+                >
+                  <option value="ALL">All Divisions</option>
+                  <option value="Shivajinagar">Shivajinagar</option>
+                  <option value="Upparpet">Upparpet</option>
+                  <option value="Koramangala">Koramangala</option>
+                  <option value="Vijayanagara">Vijayanagara</option>
+                  <option value="City Market">City Market</option>
+                  <option value="Malleshwaram">Malleshwaram</option>
+                  <option value="HAL Old Airport">HAL Airport</option>
+                </select>
+              </div>
+
+              <div className="filter-control">
+                <span className="filter-label">Vehicle Mix</span>
+                <select 
+                  className="select-minimal" 
+                  value={filterVehicle} 
+                  onChange={(e) => setFilterVehicle(e.target.value)}
+                  disabled={aiFocusMode}
+                >
+                  <option value="ALL">All Categories</option>
+                  <option value="CAR">Cars Only</option>
+                  <option value="SCOOTER">Scooters Only</option>
+                  <option value="TANKER">Buses / Tankers</option>
+                  <option value="AUTO">Three-Wheelers</option>
+                </select>
               </div>
             </div>
 
-            {/* Horizontal Filter Toolbar */}
-            <div className="toolbar-row">
-              <div className="horizontal-toolbar">
-                <div className="toolbar-item">
-                  <span className="toolbar-label">Station</span>
-                  <select className="select-minimal" value={filterStation} onChange={(e) => setFilterStation(e.target.value)}>
-                    <option value="ALL">ALL Stations</option>
-                    <option value="Shivajinagar">Shivajinagar</option>
-                    <option value="Upparpet">Upparpet</option>
-                    <option value="Koramangala">Koramangala</option>
-                    <option value="Vijayanagara">Vijayanagara</option>
-                    <option value="City Market">City Market</option>
-                    <option value="HAL Old Airport">HAL Airport</option>
-                  </select>
-                </div>
+            <div className="slider-container">
+              <div className="slider-header">
+                <span>Minimum CIS Impact</span>
+                <span className="mono">{minCis.toFixed(1)}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="10" 
+                step="0.5" 
+                value={minCis} 
+                onChange={(e) => setMinCis(parseFloat(e.target.value))}
+                className="slider-input"
+                disabled={aiFocusMode}
+              />
+            </div>
 
-                <div className="toolbar-item">
-                  <span className="toolbar-label">Vehicle</span>
-                  <select className="select-minimal" value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
-                    <option value="ALL">ALL Vehicles</option>
-                    <option value="CAR">Cars</option>
-                    <option value="SCOOTER">Scooters</option>
-                    <option value="TANKER">Tankers / Buses</option>
-                    <option value="AUTO">Autos</option>
-                  </select>
-                </div>
-
-                <div className="toolbar-item">
-                  <span className="toolbar-label">Min CIS: <span className="mono text-white font-medium">{minCis.toFixed(1)}</span></span>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="10" 
-                    step="0.5" 
-                    value={minCis} 
-                    onChange={(e) => setMinCis(parseFloat(e.target.value))}
-                    className="slider-minimal"
-                  />
+            {/* AI Focus Mode switch widget */}
+            <div className="ai-focus-card">
+              <div className="ai-focus-card-left">
+                <Zap size={14} className="blue-text" style={{ color: 'var(--accent-blue)' }} />
+                <div>
+                  <span className="ai-focus-title">Show Highest Impact Locations</span>
+                  <p className="ai-focus-desc">Filter top 5 hotspots & show expected reduction</p>
                 </div>
               </div>
+              <label className="switch">
+                <input 
+                  type="checkbox" 
+                  checked={aiFocusMode}
+                  onChange={(e) => setAiFocusMode(e.target.checked)}
+                />
+                <span className="switch-slider"></span>
+              </label>
+            </div>
+            
+            <button className="btn-primary-cta" onClick={triggerOptimization}>
+              <Navigation size={14} />
+              <span>Generate Patrol Plan</span>
+            </button>
+          </div>
 
-              <div className="toolbar-actions">
-                <button className="btn-minimal btn-primary" onClick={triggerOptimization}>
-                  Generate Patrol Plan
-                </button>
-                <button className="btn-minimal" onClick={resetAll}>
-                  Reset Filters
-                </button>
+          {/* Conditional Layout Section: Executive Theme Info Summary */}
+          {activeTheme === 'executive' && (
+            <div className="sidebar-section">
+              <span className="section-title">Executive Summary Overview</span>
+              <div className="exec-summary-row" style={{ marginTop: '10px' }}>
+                <div className="exec-metric-card">
+                  <span className="exec-metric-label">Total Loss</span>
+                  <span className="exec-metric-value mono">₹{summaryMetrics.totalCost.toLocaleString()}</span>
+                </div>
+                <div className="exec-metric-card">
+                  <span className="exec-metric-label">Patrol Units</span>
+                  <span className="exec-metric-value mono">4/10</span>
+                </div>
               </div>
+              <div className="exec-chart-card">
+                <span className="exec-metric-label" style={{ marginBottom: '8px', display: 'block' }}>Resource Allocation Status</span>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Dispatched: <b>3 Active Routes</b></span>
+                  <span style={{ color: 'var(--success-green)' }}>Efficient (85%)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 2: Priority Index Table */}
+          <div className="sidebar-section" style={{ flex: 1, minHeight: '220px' }}>
+            <div className="section-header">
+              <span className="section-title">Priority Index</span>
+              <span className="filter-label">{filteredHotspots.length} found</span>
+            </div>
+
+            <div className="priority-table-container">
+              <table className="priority-table">
+                <thead>
+                  <tr>
+                    <th>Junction</th>
+                    <th>CIS</th>
+                    <th>Improvement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHotspots.length > 0 ? (
+                    filteredHotspots.sort((a,b) => b.cis - a.cis).map((h, index) => {
+                      const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+                      return (
+                        <tr 
+                          key={h.id} 
+                          className={isSelected ? 'selected' : ''}
+                          onClick={() => handleSelectHotspot(h)}
+                        >
+                          <td>
+                            <div className="status-indicator">
+                              <span className="mono" style={{ color: 'var(--text-muted)', marginRight: '4px' }}>{index + 1}.</span>
+                              <span className={`dot-badge ${h.status}`} />
+                              <span>{h.name}</span>
+                            </div>
+                          </td>
+                          <td className="mono font-semibold">{h.cis}</td>
+                          <td className="mono" style={{ color: 'var(--accent-blue)' }}>+{h.expected_improvement}%</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="3" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 0' }}>
+                        No hotspots match filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* Core Tab Canvas */}
-          <div className="tab-content">
-            {activeTab === 'map' && (
-              <div className="map-view">
-                <div 
-                  className={`map-canvas ${isDragging ? 'grabbing' : 'grab'}`}
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp}
-                  onWheel={handleWheel}
-                >
-                  <svg width="100%" height="100%" viewBox="0 0 900 550" preserveAspectRatio="xMidYMid meet">
-                    <defs>
-                      <pattern id="grid-dots" width="20" height="20" patternUnits="userSpaceOnUse">
-                        <circle cx="2" cy="2" r="0.5" fill="#1c1c1e" />
-                      </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#grid-dots)" />
-
-                    {/* Transform Group for Zoom & Pan */}
-                    <g 
-                      transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
-                      style={{ transition: isDragging ? 'none' : 'transform 0.15s cubic-bezier(0.16, 1, 0.3, 1)' }}
-                    >
-                      {/* Lakes / Waterbodies Layer */}
-                      <g>
-                        {/* Ulsoor Lake */}
-                        <polygon points="490,140 540,150 560,190 520,200 480,180" className="lake-polygon" />
-                        <text x="505" y="170" className="landmark-text lake-text">Ulsoor Lake</text>
-
-                        {/* Bellandur Lake */}
-                        <polygon points="680,390 770,395 810,435 760,455 700,420" className="lake-polygon" />
-                        <text x="720" y="420" className="landmark-text lake-text">Bellandur Lake</text>
-
-                        {/* Sankey Tank */}
-                        <polygon points="260,80 300,90 280,120 240,110" className="lake-polygon" />
-                        <text x="250" y="105" className="landmark-text lake-text">Sankey Tank</text>
-                      </g>
-
-                      {/* Parks / Greenery Layer */}
-                      <g>
-                        {/* Cubbon Park */}
-                        <polygon points="360,180 410,170 430,220 380,240" className="park-polygon" />
-                        <text x="375" y="205" className="landmark-text park-text">Cubbon Park</text>
-
-                        {/* Lalbagh Botanical Gardens */}
-                        <polygon points="380,390 440,380 450,440 395,450" className="park-polygon" />
-                        <text x="400" y="420" className="landmark-text park-text">Lalbagh Gardens</text>
-                      </g>
-
-                      {/* Road Networks Layer */}
-                      <g>
-                        {/* Highways */}
-                        <line x1="50" y1="200" x2="850" y2="200" className="street-line street-line-major" />
-                        <text x="70" y="192" className="street-text">MG Road / Old Madras Rd</text>
-
-                        <line x1="450" y1="200" x2="780" y2="520" className="street-line street-line-major" />
-                        <text x="560" y="315" className="street-text" transform="rotate(45, 560, 315)">Hosur Road</text>
-
-                        <line x1="450" y1="200" x2="120" y2="50" className="street-line street-line-major" />
-                        <text x="240" y="115" className="street-text" transform="rotate(25, 240, 115)">Tumkur Road</text>
-
-                        <path d="M 150,150 C 150,50 750,50 750,150 C 750,350 750,450 650,480 C 550,510 350,510 250,480 C 150,450 150,350 150,150 Z" fill="none" className="street-line street-line-major" strokeDasharray="6,4" />
-                        <text x="160" y="330" className="street-text" transform="rotate(90, 160, 330)">Outer Ring Road</text>
-
-                        {/* Local/Secondary Streets */}
-                        <line x1="200" y1="20" x2="200" y2="520" className="street-line" />
-                        <text x="210" y="60" className="street-text">Modi Hospital Rd</text>
-
-                        <line x1="550" y1="200" x2="550" y2="520" className="street-line" />
-                        <text x="560" y="240" className="street-text">Koramangala 80ft Rd</text>
-
-                        <line x1="350" y1="120" x2="350" y2="350" className="street-line" />
-                        <text x="360" y="150" className="street-text">Shivajinagar Link</text>
-
-                        <line x1="200" y1="270" x2="450" y2="270" className="street-line" />
-                        <text x="220" y="263" className="street-text">Upparpet Corridor</text>
-                      </g>
-
-                      {/* Hotspot Nodes Layer */}
-                      <g>
-                        {filteredHotspots.map(h => {
-                          const isCritical = h.status === 'critical';
-                          const isActive = h.status === 'active';
-                          const strokeColor = isCritical ? 'var(--alert-red)' : (isActive ? 'var(--primary-blue)' : 'var(--text-muted)');
-                          const fillColor = isCritical ? 'rgba(255, 0, 85, 0.15)' : (isActive ? 'rgba(0, 114, 245, 0.12)' : 'rgba(83, 92, 106, 0.08)');
-                          const isSelected = selectedHotspot && selectedHotspot.id === h.id;
-
-                          return (
-                            <g 
-                              key={h.id} 
-                              className="node-group"
-                              onClick={(e) => {
-                                e.stopPropagation(); // Avoid dragging triggers
-                                setSelectedHotspot(h);
-                              }}
-                            >
-                              {/* Inner Circle Fill */}
-                              <circle 
-                                cx={h.x} 
-                                cy={h.y} 
-                                r={isSelected ? h.size + 4 : h.size} 
-                                className="node-center"
-                                fill={fillColor}
-                                stroke={strokeColor}
-                                strokeWidth={isSelected ? "1.5" : "1"}
-                              />
-                              {/* Glow Outer ring */}
-                              <circle 
-                                cx={h.x} 
-                                cy={h.y} 
-                                r={isSelected ? h.size + 10 : h.size + 4} 
-                                className="node-ring"
-                                stroke={strokeColor}
-                                fill="none"
-                                opacity={isSelected ? 1.0 : 0.4}
-                              />
-                              {/* Centroid Dot */}
-                              <circle cx={h.x} cy={h.y} r="2" fill="#ffffff" />
-                            </g>
-                          );
-                        })}
-                      </g>
-                    </g>
-                  </svg>
-
-                  {/* Floating Google-Maps-Style Action Buttons */}
-                  <div className="map-controls">
-                    <button className="map-control-btn" onClick={zoomIn} title="Zoom In">+</button>
-                    <button className="map-control-btn" onClick={zoomOut} title="Zoom Out">-</button>
-                    <button className="map-control-btn" onClick={resetZoom} title="Reset View">⟲</button>
-                  </div>
-
-                  {/* Floating Maps Legend Card */}
-                  <div className="map-legend">
-                    <div className="legend-title font-mono">MAP LAYERS</div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-highway" />
-                      <span>Highway / Corridor</span>
-                    </div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-road" />
-                      <span>Arterial Street</span>
-                    </div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-park" />
-                      <span>Park / Forest</span>
-                    </div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-lake" />
-                      <span>Lake / Waterbody</span>
-                    </div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-critical-node" />
-                      <span>Critical (CIS &gt; 9.0)</span>
-                    </div>
-                    <div className="legend-item">
-                      <span className="legend-color legend-active-node" />
-                      <span>Active (CIS 7.0 - 9.0)</span>
-                    </div>
-                  </div>
-                </div>
+          {/* Section 3: Patrol Plan Checklist */}
+          {optimizationTriggered && (
+            <div className="sidebar-section">
+              <div className="section-header">
+                <span className="section-title">Patrol Deployment Plan</span>
+                <span className="brand-badge">Optimal</span>
               </div>
-            )}
+              <div className="patrol-plan-container">
+                {dispatchRoutes.map((r, idx) => (
+                  <div key={idx} className="patrol-card">
+                    <div className="patrol-card-header">
+                      <span className="patrol-unit-name">
+                        <Shield size={12} className="blue-text" style={{ color: 'var(--accent-blue)' }} />
+                        <span>{r.unit}</span>
+                      </span>
+                      <span className="patrol-unit-badge">{r.code}</span>
+                    </div>
+                    <p className="patrol-assignment">
+                      Deploying to <b>{r.target}</b> to resolve bottleneck congestion.
+                    </p>
+                    <span className="patrol-action-pill">{r.action}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-            {activeTab === 'analytics' && (
-              <div className="analytics-grid">
-                <div className="analytics-row">
-                  <div className="analytics-card">
-                    <span className="analytics-title">Operational Violation Trends</span>
-                    <div style={{ width: '100%', height: 220 }}>
-                      <ResponsiveContainer>
-                        <LineChart data={trendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1e" />
-                          <XAxis dataKey="name" stroke="#444444" style={{ fontSize: 10 }} />
-                          <YAxis stroke="#444444" style={{ fontSize: 10 }} />
-                          <Tooltip contentStyle={{ backgroundColor: '#000000', borderColor: '#1c1c1e', color: '#ffffff' }} />
-                          <Line type="monotone" dataKey="CIS" stroke="var(--primary-blue)" strokeWidth={1.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
+        </aside>
+
+        {/* Right Map Viewport (occupies 70% width) */}
+        <main className="map-pane">
+          {/* Map canvas container */}
+          <div ref={mapContainerRef} className="map-container-leaflet" />
+
+          {/* AI Focus Floating banner */}
+          {aiFocusMode && (
+            <div className="ai-impact-overlay-banner">
+              <span className="ai-overlay-badge">AI Focus Active</span>
+              <span className="ai-overlay-text">
+                Top 5 critical bottlenecks targeted. Expected delay reduction: <b>+38.5%</b>
+              </span>
+            </div>
+          )}
+
+          {/* Floating Map Legend */}
+          <div className="map-legend-floating">
+            {activeLayer === 'congestion' ? (
+              <>
+                <div className="legend-row">
+                  <span className="legend-dot critical" />
+                  <span>Critical Loss (≥ 40%)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot orange" />
+                  <span>High Loss (30% - 39%)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot" style={{ backgroundColor: '#eab308' }} />
+                  <span>Moderate Loss (20% - 29%)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot green" />
+                  <span>Healthy Index (&lt; 20%)</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="legend-row">
+                  <span className="legend-dot critical" />
+                  <span>Critical Alert (CIS ≥ 9.0)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot active" />
+                  <span>Active Congestion (CIS 7.0 - 8.9)</span>
+                </div>
+                <div className="legend-row">
+                  <span className="legend-dot neutral" />
+                  <span>Low Impact (CIS &lt; 7.0)</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Slide-over detail drawer */}
+          <aside className={`slide-over-drawer ${drawerOpen && selectedHotspot ? 'open' : ''}`}>
+            {selectedHotspot && (
+              <>
+                <div className="drawer-header">
+                  <div className="drawer-header-left">
+                    <h2 className="drawer-title">{selectedHotspot.name}</h2>
+                    <span className="drawer-subtitle">{selectedHotspot.jurisdiction} Division</span>
+                  </div>
+                  <button className="drawer-close-btn" onClick={() => setDrawerOpen(false)}>
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="drawer-content">
+                  
+                  {/* Status Indicator Banner */}
+                  <div className={`drawer-action-banner ${selectedHotspot.status === 'critical' ? 'critical' : ''}`}>
+                    <span className="action-label-small">Recommended Dispatch Action</span>
+                    <p className="action-text-detail">{selectedHotspot.action} immediately. Restores traffic throughput flow.</p>
+                  </div>
+
+                  {/* Section: Metrics Grid */}
+                  <div>
+                    <h3 className="drawer-section-title">Incident Parameters</h3>
+                    <div className="detail-stats-grid">
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Congestion Index (CIS)</span>
+                        <span className="detail-stat-value mono">{selectedHotspot.cis}</span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Capacity Loss</span>
+                        <span className="detail-stat-value mono" style={{ color: selectedHotspot.status === 'critical' ? 'var(--alert-red)' : 'inherit' }}>
+                          {Math.round(selectedHotspot.capacity_loss * complianceFactor)}%
+                        </span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Affected Vehicles</span>
+                        <span className="detail-stat-value mono">
+                          {selectedHotspot.affected_vehicles}/hr
+                        </span>
+                      </div>
+                      <div className="detail-stat-card">
+                        <span className="detail-stat-label">Economic Loss Rate</span>
+                        <span className="detail-stat-value mono">
+                          ₹{Math.round(selectedHotspot.economic_cost * complianceFactor).toLocaleString()}/day
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="analytics-card">
-                    <span className="analytics-title">Top Junction Capacity Loss</span>
-                    <div style={{ width: '100%', height: 220 }}>
+                  {/* Section: Compliance Simulator */}
+                  <div>
+                    <h3 className="drawer-section-title">Enforcement Simulator</h3>
+                    <div className="sim-drawer-card">
+                      <div className="sim-slider-label">
+                        <span>Compliance Target Rate</span>
+                        <span><b>{complianceRate}%</b></span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        step="5" 
+                        value={complianceRate} 
+                        onChange={(e) => setComplianceRate(parseInt(e.target.value))}
+                        className="slider-input"
+                      />
+                      <div className="sim-comparison-grid">
+                        <div className="sim-comparison-box">
+                          <span className="sim-comp-title">Delay Baseline</span>
+                          <span className="sim-comp-val">{selectedHotspot.avg_delay} min</span>
+                        </div>
+                        <div className="sim-comparison-box">
+                          <span className="sim-comp-title">Delay (Simulated)</span>
+                          <span className="sim-comp-val simulated-impact">
+                            {(selectedHotspot.avg_delay * complianceFactor).toFixed(1)} min
+                          </span>
+                        </div>
+                        <div className="sim-comparison-box">
+                          <span className="sim-comp-title">Expected Recovery</span>
+                          <span className="sim-comp-val">0.0%</span>
+                        </div>
+                        <div className="sim-comparison-box">
+                          <span className="sim-comp-title">Recovery (Simulated)</span>
+                          <span className="sim-comp-val simulated-impact">
+                            {Math.round(selectedHotspot.expected_improvement * (complianceRate / 100))}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section: Vehicle Footprint Breakdown */}
+                  <div>
+                    <h3 className="drawer-section-title">Vehicle Mix Footprint</h3>
+                    <div style={{ width: '100%', height: 120 }}>
                       <ResponsiveContainer>
-                        <BarChart data={filteredHotspots.slice(0, 5)}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1c1c1e" />
-                          <XAxis dataKey="name" stroke="#444444" style={{ fontSize: 8 }} />
-                          <YAxis stroke="#444444" style={{ fontSize: 10 }} />
-                          <Tooltip contentStyle={{ backgroundColor: '#000000', borderColor: '#1c1c1e', color: '#ffffff' }} />
-                          <Bar dataKey="capacity_loss" fill="var(--alert-red)" radius={[3, 3, 0, 0]} barSize={24} />
+                        <BarChart 
+                          data={barChartData} 
+                          layout="vertical"
+                          margin={{ top: 5, right: 10, left: -25, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={true} vertical={false} />
+                          <XAxis type="number" hide={true} />
+                          <YAxis dataKey="name" type="category" style={{ fontSize: 9, fontWeight: 500 }} />
+                          <Tooltip 
+                            contentStyle={{ fontSize: 10, border: '1px solid var(--border-color)', borderRadius: 6 }} 
+                            formatter={(value) => [`${value}%`, 'Percentage']}
+                          />
+                          <Bar dataKey="percentage" fill="var(--accent-blue)" radius={[0, 4, 4, 0]} barSize={10} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
+
+                  {/* Section: Hourly Violation Peak Trend */}
+                  {activeTheme !== 'executive' && (
+                    <div>
+                      <h3 className="drawer-section-title">24h Bottleneck Index Trend</h3>
+                      <div style={{ width: '100%', height: 140 }}>
+                        <ResponsiveContainer>
+                          <LineChart 
+                            data={trendData}
+                            margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                            <XAxis dataKey="name" style={{ fontSize: 9, fontWeight: 500 }} />
+                            <YAxis style={{ fontSize: 9 }} />
+                            <Tooltip 
+                              content={<CustomTooltip />}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="CIS" 
+                              stroke="var(--accent-blue)" 
+                              strokeWidth={2}
+                              dot={{ r: 2 }} 
+                              activeDot={{ r: 4 }} 
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
-              </div>
+              </>
             )}
+          </aside>
 
-            {activeTab === 'simulation' && (
-              <div className="sim-grid">
-                <div className="sim-controller">
-                  <div className="sim-controller-header">
-                    <span className="analytics-title">Simulation Parameters</span>
-                    <span className="mono font-semibold text-white">{complianceRate}% Enforcement Compliance</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    step="5" 
-                    value={complianceRate} 
-                    onChange={(e) => setComplianceRate(parseInt(e.target.value))}
-                    className="slider-minimal sim-slider"
-                  />
-                  <p className="sim-controller-desc">
-                    Adjust the compliance rate slider to predict traffic speeds, capacity recovery, and reduction in economic impact.
-                  </p>
-                </div>
-
-                <div className="sim-columns">
-                  <div className="sim-column-card">
-                    <span className="analytics-title">Current Baseline</span>
-                    <div className="sim-metric-row">
-                      <span>Average Traffic Speed</span>
-                      <span className="mono">18 km/h</span>
-                    </div>
-                    <div className="sim-metric-row">
-                      <span>Intersection Delay</span>
-                      <span className="mono">4.2 min</span>
-                    </div>
-                    <div className="sim-metric-row">
-                      <span>Effective Capacity Loss</span>
-                      <span className="mono">37%</span>
-                    </div>
-                  </div>
-
-                  <div className="sim-column-card" style={{ borderColor: 'rgba(0,112,243,0.3)' }}>
-                    <span className="analytics-title" style={{ color: 'var(--primary-blue)' }}>After Enforcement (Simulated)</span>
-                    <div className="sim-metric-row">
-                      <span>Average Traffic Speed</span>
-                      <span className="mono" style={{ color: 'var(--primary-blue)', fontWeight: 500 }}>
-                        {Math.round(18 + (11 * (complianceRate / 100)))} km/h
-                      </span>
-                    </div>
-                    <div className="sim-metric-row">
-                      <span>Intersection Delay</span>
-                      <span className="mono" style={{ color: 'var(--primary-blue)', fontWeight: 500 }}>
-                        {(4.2 - (2.1 * (complianceRate / 100))).toFixed(1)} min
-                      </span>
-                    </div>
-                    <div className="sim-metric-row">
-                      <span>Congestion Reduction</span>
-                      <span className="mono" style={{ color: 'var(--primary-blue)', fontWeight: 500 }}>
-                        {Math.round(complianceRate * 0.42)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Sidebar (Hotspot Details, Queue, Patrol plan) */}
-        <aside className="right-sidebar">
-          {/* Selected Hotspot Section */}
-          <div className="sidebar-section border-bottom">
-            <h3 className="section-label">Inspection Panel</h3>
-            {selectedHotspot ? (
-              <div className="selected-hotspot-details">
-                <div className="hotspot-header">
-                  <span className="hotspot-name">{selectedHotspot.name}</span>
-                  <span className={`pill ${selectedHotspot.status === 'critical' ? 'pill-critical' : (selectedHotspot.status === 'active' ? 'pill-active' : 'pill-neutral')}`}>
-                    CIS {selectedHotspot.cis}
-                  </span>
-                </div>
-                <div className="hotspot-location font-mono">{selectedHotspot.jurisdiction} Division</div>
-                
-                <div className="stats-grid">
-                  <div className="stat-box">
-                    <span className="stat-label">Violations</span>
-                    <span className="stat-val mono">{selectedHotspot.violations}</span>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-label">Impact Flow</span>
-                    <span className="stat-val mono">{selectedHotspot.affected_vehicles}/h</span>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-label">Cap. Loss</span>
-                    <span className="stat-val mono alert-text">{selectedHotspot.capacity_loss}%</span>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-label">Econ. Cost</span>
-                    <span className="stat-val mono">₹{(selectedHotspot.economic_cost * complianceFactor).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="action-banner">
-                  <div className="action-title">RECOMMENDED ACTION</div>
-                  <div className="action-desc">{selectedHotspot.action}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-state">
-                Select a hotspot node on the map to inspect operational details.
-              </div>
-            )}
-          </div>
-
-          {/* Priority Queue Section */}
-          <div className="sidebar-section border-bottom">
-            <h3 className="section-label font-mono">Priority Hotspots</h3>
-            <div className="priority-list">
-              {filteredHotspots.length > 0 ? (
-                filteredHotspots.sort((a,b) => b.cis - a.cis).map((h) => {
-                  const isSelected = selectedHotspot && selectedHotspot.id === h.id;
-                  return (
-                    <div 
-                      key={h.id} 
-                      className={`priority-item ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedHotspot(h)}
-                    >
-                      <span className="priority-name">{h.name}</span>
-                      <span className={`pill-dot ${h.status === 'critical' ? 'dot-red' : (h.status === 'active' ? 'dot-blue' : 'dot-grey')}`} />
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="empty-state">No hotspots matching active filters.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Patrol Plan Section */}
-          <div className="sidebar-section">
-            <h3 className="section-label font-mono">Patrol Plan</h3>
-            <div className="patrol-list">
-              {optimizationTriggered ? (
-                dispatchRoutes.map((r, idx) => (
-                  <div key={idx} className="patrol-item">
-                    <div className="patrol-unit font-mono">
-                      <ChevronRight size={12} className="blue-text" />
-                      <span>{r.unit}</span>
-                    </div>
-                    <div className="patrol-assignment">
-                      Deploy to <b>{r.target.split(' ')[0]}</b>: <span>{r.action}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="empty-state">
-                  No active patrol plan. Click "Generate Patrol Plan" to trigger.
-                </div>
-              )}
-            </div>
-          </div>
-        </aside>
+        </main>
 
       </div>
     </div>
   );
+}
+
+// Custom tooltip renderer for Recharts Line Chart
+function CustomTooltip({ active, payload, label }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="recharts-minimal-tooltip">
+        <p className="label">{label}</p>
+        <p className="item">{`Bottleneck Index: ${payload[0].value}`}</p>
+      </div>
+    );
+  }
+  return null;
 }
