@@ -173,6 +173,12 @@ export default function App() {
   const [optimizationTriggered, setOptimizationTriggered] = useState(false);
   const [dispatchRoutes, setDispatchRoutes] = useState([]);
 
+  // Interactive Zoom & Pan States
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   // Filter Data
   const filteredHotspots = useMemo(() => {
     return INITIAL_HOTSPOTS.filter(h => {
@@ -231,6 +237,44 @@ export default function App() {
       routes.push({ unit: "Tow Unit 02", target: sorted[1].name, action: "Clear Blockage" });
     }
     setDispatchRoutes(routes);
+  };
+
+  // Drag & Zoom Event Handlers
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return; // Only drag with left click
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    setPan({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const zoomFactor = 1.1;
+    let newZoom = zoom;
+    if (e.deltaY < 0) {
+      newZoom = Math.min(zoom * zoomFactor, 4.0); // limit 4x zoom in
+    } else {
+      newZoom = Math.max(zoom / zoomFactor, 0.8); // limit 0.8x zoom out
+    }
+    setZoom(newZoom);
+  };
+
+  const zoomIn = () => setZoom(prev => Math.min(prev * 1.2, 4.0));
+  const zoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.8));
+  const resetZoom = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   };
 
   // Recharts Data mapping
@@ -352,7 +396,14 @@ export default function App() {
           <div className="tab-content">
             {activeTab === 'map' && (
               <div className="map-view">
-                <div className="map-canvas">
+                <div 
+                  className={`map-canvas ${isDragging ? 'grabbing' : 'grab'}`}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  onWheel={handleWheel}
+                >
                   <svg width="100%" height="100%" viewBox="0 0 900 550" preserveAspectRatio="xMidYMid meet">
                     <defs>
                       <pattern id="grid-dots" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -361,60 +412,148 @@ export default function App() {
                     </defs>
                     <rect width="100%" height="100%" fill="url(#grid-dots)" />
 
-                    {/* Road Network Lines */}
-                    <g>
-                      <line x1="50" y1="270" x2="850" y2="270" className="street-line street-line-major" />
-                      <line x1="450" y1="20" x2="450" y2="520" className="street-line street-line-major" />
-                      <line x1="150" y1="50" x2="750" y2="450" className="street-line" />
-                      <circle cx="450" cy="270" r="180" fill="none" stroke="#121214" strokeWidth="2.5" />
+                    {/* Transform Group for Zoom & Pan */}
+                    <g 
+                      transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
+                      style={{ transition: isDragging ? 'none' : 'transform 0.15s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                    >
+                      {/* Lakes / Waterbodies Layer */}
+                      <g>
+                        {/* Ulsoor Lake */}
+                        <polygon points="490,140 540,150 560,190 520,200 480,180" className="lake-polygon" />
+                        <text x="505" y="170" className="landmark-text lake-text">Ulsoor Lake</text>
 
-                      <text x="460" y="45" className="street-text">Modi Hospital Rd</text>
-                      <text x="70" y="260" className="street-text">NH-48 Link</text>
-                      <text x="630" y="415" className="street-text">Outer Ring Road</text>
-                    </g>
+                        {/* Bellandur Lake */}
+                        <polygon points="680,390 770,395 810,435 760,455 700,420" className="lake-polygon" />
+                        <text x="720" y="420" className="landmark-text lake-text">Bellandur Lake</text>
 
-                    {/* Node Representations */}
-                    <g>
-                      {filteredHotspots.map(h => {
-                        const isCritical = h.status === 'critical';
-                        const isActive = h.status === 'active';
-                        const strokeColor = isCritical ? 'var(--alert-red)' : (isActive ? 'var(--primary-blue)' : 'var(--text-muted)');
-                        const fillColor = isCritical ? 'rgba(255, 0, 85, 0.12)' : (isActive ? 'rgba(0, 112, 243, 0.1)' : 'rgba(83, 92, 106, 0.05)');
-                        const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+                        {/* Sankey Tank */}
+                        <polygon points="260,80 300,90 280,120 240,110" className="lake-polygon" />
+                        <text x="250" y="105" className="landmark-text lake-text">Sankey Tank</text>
+                      </g>
 
-                        return (
-                          <g 
-                            key={h.id} 
-                            className="node-group"
-                            onClick={() => setSelectedHotspot(h)}
-                          >
-                            {/* Inner Circle Fill */}
-                            <circle 
-                              cx={h.x} 
-                              cy={h.y} 
-                              r={isSelected ? h.size + 4 : h.size} 
-                              className="node-center"
-                              fill={fillColor}
-                              stroke={strokeColor}
-                              strokeWidth={isSelected ? "1.5" : "1"}
-                            />
-                            {/* Glow Outer ring */}
-                            <circle 
-                              cx={h.x} 
-                              cy={h.y} 
-                              r={isSelected ? h.size + 10 : h.size + 4} 
-                              className="node-ring"
-                              stroke={strokeColor}
-                              fill="none"
-                              opacity={isSelected ? 1.0 : 0.4}
-                            />
-                            {/* Centroid Dot */}
-                            <circle cx={h.x} cy={h.y} r="2" fill="#ffffff" />
-                          </g>
-                        );
-                      })}
+                      {/* Parks / Greenery Layer */}
+                      <g>
+                        {/* Cubbon Park */}
+                        <polygon points="360,180 410,170 430,220 380,240" className="park-polygon" />
+                        <text x="375" y="205" className="landmark-text park-text">Cubbon Park</text>
+
+                        {/* Lalbagh Botanical Gardens */}
+                        <polygon points="380,390 440,380 450,440 395,450" className="park-polygon" />
+                        <text x="400" y="420" className="landmark-text park-text">Lalbagh Gardens</text>
+                      </g>
+
+                      {/* Road Networks Layer */}
+                      <g>
+                        {/* Highways */}
+                        <line x1="50" y1="200" x2="850" y2="200" className="street-line street-line-major" />
+                        <text x="70" y="192" className="street-text">MG Road / Old Madras Rd</text>
+
+                        <line x1="450" y1="200" x2="780" y2="520" className="street-line street-line-major" />
+                        <text x="560" y="315" className="street-text" transform="rotate(45, 560, 315)">Hosur Road</text>
+
+                        <line x1="450" y1="200" x2="120" y2="50" className="street-line street-line-major" />
+                        <text x="240" y="115" className="street-text" transform="rotate(25, 240, 115)">Tumkur Road</text>
+
+                        <path d="M 150,150 C 150,50 750,50 750,150 C 750,350 750,450 650,480 C 550,510 350,510 250,480 C 150,450 150,350 150,150 Z" fill="none" className="street-line street-line-major" strokeDasharray="6,4" />
+                        <text x="160" y="330" className="street-text" transform="rotate(90, 160, 330)">Outer Ring Road</text>
+
+                        {/* Local/Secondary Streets */}
+                        <line x1="200" y1="20" x2="200" y2="520" className="street-line" />
+                        <text x="210" y="60" className="street-text">Modi Hospital Rd</text>
+
+                        <line x1="550" y1="200" x2="550" y2="520" className="street-line" />
+                        <text x="560" y="240" className="street-text">Koramangala 80ft Rd</text>
+
+                        <line x1="350" y1="120" x2="350" y2="350" className="street-line" />
+                        <text x="360" y="150" className="street-text">Shivajinagar Link</text>
+
+                        <line x1="200" y1="270" x2="450" y2="270" className="street-line" />
+                        <text x="220" y="263" className="street-text">Upparpet Corridor</text>
+                      </g>
+
+                      {/* Hotspot Nodes Layer */}
+                      <g>
+                        {filteredHotspots.map(h => {
+                          const isCritical = h.status === 'critical';
+                          const isActive = h.status === 'active';
+                          const strokeColor = isCritical ? 'var(--alert-red)' : (isActive ? 'var(--primary-blue)' : 'var(--text-muted)');
+                          const fillColor = isCritical ? 'rgba(255, 0, 85, 0.15)' : (isActive ? 'rgba(0, 114, 245, 0.12)' : 'rgba(83, 92, 106, 0.08)');
+                          const isSelected = selectedHotspot && selectedHotspot.id === h.id;
+
+                          return (
+                            <g 
+                              key={h.id} 
+                              className="node-group"
+                              onClick={(e) => {
+                                e.stopPropagation(); // Avoid dragging triggers
+                                setSelectedHotspot(h);
+                              }}
+                            >
+                              {/* Inner Circle Fill */}
+                              <circle 
+                                cx={h.x} 
+                                cy={h.y} 
+                                r={isSelected ? h.size + 4 : h.size} 
+                                className="node-center"
+                                fill={fillColor}
+                                stroke={strokeColor}
+                                strokeWidth={isSelected ? "1.5" : "1"}
+                              />
+                              {/* Glow Outer ring */}
+                              <circle 
+                                cx={h.x} 
+                                cy={h.y} 
+                                r={isSelected ? h.size + 10 : h.size + 4} 
+                                className="node-ring"
+                                stroke={strokeColor}
+                                fill="none"
+                                opacity={isSelected ? 1.0 : 0.4}
+                              />
+                              {/* Centroid Dot */}
+                              <circle cx={h.x} cy={h.y} r="2" fill="#ffffff" />
+                            </g>
+                          );
+                        })}
+                      </g>
                     </g>
                   </svg>
+
+                  {/* Floating Google-Maps-Style Action Buttons */}
+                  <div className="map-controls">
+                    <button className="map-control-btn" onClick={zoomIn} title="Zoom In">+</button>
+                    <button className="map-control-btn" onClick={zoomOut} title="Zoom Out">-</button>
+                    <button className="map-control-btn" onClick={resetZoom} title="Reset View">⟲</button>
+                  </div>
+
+                  {/* Floating Maps Legend Card */}
+                  <div className="map-legend">
+                    <div className="legend-title font-mono">MAP LAYERS</div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-highway" />
+                      <span>Highway / Corridor</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-road" />
+                      <span>Arterial Street</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-park" />
+                      <span>Park / Forest</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-lake" />
+                      <span>Lake / Waterbody</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-critical-node" />
+                      <span>Critical (CIS &gt; 9.0)</span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-color legend-active-node" />
+                      <span>Active (CIS 7.0 - 9.0)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

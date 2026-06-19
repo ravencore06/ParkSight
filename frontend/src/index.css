@@ -306,38 +306,195 @@ body {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  padding: 24px;
+  padding: 0; /* Fully edge-to-edge maps background */
 }
 
 .map-canvas {
   width: 100%;
   height: 100%;
-  max-width: 900px;
-  max-height: 550px;
-  aspect-ratio: 900 / 550;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  background-color: #030303;
+  user-select: none;
 }
 
+.map-canvas.grab {
+  cursor: grab;
+}
+
+.map-canvas.grabbing {
+  cursor: grabbing;
+}
+
+/* Road Styling */
 .street-line {
-  stroke: #161618;
-  stroke-width: 4;
+  stroke: #141416;
+  stroke-width: 3.5;
   fill: none;
   stroke-linecap: round;
 }
 
 .street-line-major {
-  stroke: #28282a;
-  stroke-width: 6;
+  stroke: #252529;
+  stroke-width: 5;
 }
 
 .street-text {
   fill: var(--text-muted);
-  font-size: 8px;
+  font-size: 7.5px;
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.05em;
   pointer-events: none;
+}
+
+/* Google-Maps-Style Environmental Polygons */
+.lake-polygon {
+  fill: rgba(0, 114, 245, 0.06);
+  stroke: rgba(0, 114, 245, 0.18);
+  stroke-width: 1;
+  transition: fill 0.2s ease;
+}
+
+.lake-polygon:hover {
+  fill: rgba(0, 114, 245, 0.12);
+}
+
+.park-polygon {
+  fill: rgba(0, 200, 83, 0.04);
+  stroke: rgba(0, 200, 83, 0.14);
+  stroke-width: 1;
+  transition: fill 0.2s ease;
+}
+
+.park-polygon:hover {
+  fill: rgba(0, 200, 83, 0.08);
+}
+
+.landmark-text {
+  font-size: 7px;
+  font-weight: 500;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.lake-text {
+  fill: rgba(0, 114, 245, 0.45);
+}
+
+.park-text {
+  fill: rgba(0, 200, 83, 0.45);
+}
+
+/* Floating Zoom / Pan Toolbar controls */
+.map-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+
+.map-control-btn {
+  background-color: rgba(10, 10, 12, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.map-control-btn:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--text-secondary);
+}
+
+/* Floating Map Legend */
+.map-legend {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background-color: rgba(5, 5, 5, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+  pointer-events: none; /* Let clicks pass through onto map canvas */
+}
+
+.legend-title {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legend-highway {
+  border-bottom: 2px solid #252529;
+  height: 4px;
+  border-radius: 0;
+}
+
+.legend-road {
+  border-bottom: 1.5px solid #141416;
+  height: 4px;
+  border-radius: 0;
+}
+
+.legend-park {
+  background-color: rgba(0, 200, 83, 0.04);
+  border: 1px solid rgba(0, 200, 83, 0.14);
+}
+
+.legend-lake {
+  background-color: rgba(0, 114, 245, 0.06);
+  border: 1px solid rgba(0, 114, 245, 0.18);
+}
+
+.legend-critical-node {
+  background-color: rgba(255, 0, 85, 0.15);
+  border: 1px solid var(--alert-red);
+  border-radius: 50%;
+}
+
+.legend-active-node {
+  background-color: rgba(0, 114, 245, 0.12);
+  border: 1px solid var(--primary-blue);
+  border-radius: 50%;
 }
 
 /* Map Node States */
@@ -356,12 +513,8 @@ body {
 }
 
 .node-group:hover .node-ring {
-  stroke-width: 2;
+  stroke-width: 2.5;
   opacity: 0.8;
-}
-
-.node-group:hover .node-center {
-  stroke-dasharray: 2;
 }
 
 /* Right Sidebar Details panel */
