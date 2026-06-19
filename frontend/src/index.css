@@ -138,7 +138,7 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .brand-logo {
@@ -149,19 +149,25 @@ body {
 }
 
 .brand-name {
-  font-weight: 600;
-  font-size: 0.875rem;
+  font-weight: 700;
+  font-size: 1.05rem;
   letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
+.brand-divider {
+  color: var(--border-color);
+  font-weight: 300;
+  font-size: 0.95rem;
+  user-select: none;
+  margin: 0 2px;
+}
+
 .brand-slogan {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-muted);
-  border-left: 1px solid var(--border-color);
-  padding-left: 10px;
-  margin-left: 4px;
+  letter-spacing: 0.05em;
 }
 
 /* Navbar Search and Switcher Widgets */
