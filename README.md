@@ -1,4 +1,11 @@
-# PARKSIGHT
+██████╗  █████╗ ██████╗ ██╗  ██╗███████╗██╗ ██████╗ ██╗  ██╗████████╗
+██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔════╝██║██╔════╝ ██║  ██║╚══██╔══╝
+██████╔╝███████║██████╔╝█████╔╝ ███████╗██║██║  ███╗███████║   ██║
+██╔═══╝ ██╔══██║██╔══██╗██╔═██╗ ╚════██║██║██║   ██║██╔══██║   ██║
+██║     ██║  ██║██║  ██║██║  ██╗███████║██║╚██████╔╝██║  ██║   ██║
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+
+> Detect. Prioritize. Optimize.
 > **Detect. Prioritize. Optimize.**
 
 PARKSIGHT is an AI-powered Parking Intelligence and Traffic Operations Command Center designed for municipal traffic authorities (such as the Bangalore Traffic Police). It transitions parking enforcement from reactive patrolling to data-driven congestion mitigation by identifying chronic parking bottlenecks, quantifying their economic/environmental costs, and optimizing patrol dispatches.
