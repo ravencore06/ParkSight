@@ -510,6 +510,8 @@ input:checked + .switch-slider:before {
 /* Priority Table (Linear style) */
 .priority-table-container {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 200px; /* Constrains height to prevent vertical overflow and overlaps */
   border-radius: var(--border-radius-sm);
   border: 1px solid var(--border-color);
 }
@@ -1116,3 +1118,34 @@ input:checked + .switch-slider:before {
     width: 360px;
   }
 }
+
+/* Primary CTA dispatch button */
+.btn-primary-cta {
+  width: 100%;
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  border: 1px solid var(--text-primary);
+  padding: 8px 16px;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  margin-top: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary-cta:hover {
+  background-color: var(--text-secondary);
+  border-color: var(--text-secondary);
+  color: var(--bg-primary);
+}
+
+.btn-primary-cta:active {
+  transform: translateY(0.5px);
+}
+

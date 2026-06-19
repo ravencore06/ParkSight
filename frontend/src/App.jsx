@@ -200,9 +200,9 @@ export default function App() {
   const [optimizationTriggered, setOptimizationTriggered] = useState(false);
   const [dispatchRoutes, setDispatchRoutes] = useState([]);
 
-  // Map DOM and Leaflet instance references
+  // Map DOM and Leaflet state references
   const mapContainerRef = useRef(null);
-  const leafletMapRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const tileLayerRef = useRef(null);
   const markersRef = useRef({});
   const polylinesRef = useRef([]);
@@ -225,10 +225,19 @@ export default function App() {
     return INITIAL_HOTSPOTS.filter(h => {
       // Station filter
       if (filterStation !== 'ALL' && h.jurisdiction !== filterStation) return false;
-      // Vehicle type filter
-      if (filterVehicle !== 'ALL' && !h.vehicle_mix.toLowerCase().includes(filterVehicle.toLowerCase())) return false;
+      
+      // Vehicle type filter (maps dropdown categories strictly to raw dataset labels)
+      if (filterVehicle !== 'ALL') {
+        const mix = h.vehicle_mix.toLowerCase();
+        if (filterVehicle === 'CAR' && !mix.includes('car') && !mix.includes('van') && !mix.includes('cab')) return false;
+        if (filterVehicle === 'SCOOTER' && !mix.includes('scooter') && !mix.includes('cycle') && !mix.includes('moped')) return false;
+        if (filterVehicle === 'TANKER' && !mix.includes('tanker') && !mix.includes('bus') && !mix.includes('lgv') && !mix.includes('hcv')) return false;
+        if (filterVehicle === 'AUTO' && !mix.includes('auto')) return false;
+      }
+
       // CIS slider
       if (h.cis < minCis) return false;
+
       // Search bar filter
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase();
@@ -267,8 +276,9 @@ export default function App() {
 
   // Leaflet Map Initialization
   useEffect(() => {
-    if (!leafletMapRef.current && mapContainerRef.current) {
-      const map = L.map(mapContainerRef.current, {
+    let map;
+    if (!mapInstance && mapContainerRef.current) {
+      map = L.map(mapContainerRef.current, {
         zoomControl: false
       }).setView([12.9716, 77.5946], 13);
       
@@ -277,21 +287,19 @@ export default function App() {
         position: 'bottomleft'
       }).addTo(map);
 
-      leafletMapRef.current = map;
+      setMapInstance(map);
     }
 
     return () => {
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
+      if (map) {
+        map.remove();
       }
     };
   }, []);
 
   // Sync Leaflet base tiles dynamically based on activeTheme (Light Positron vs Dark Matter)
   useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map) return;
+    if (!mapInstance) return;
 
     if (tileLayerRef.current) {
       tileLayerRef.current.remove();
@@ -305,29 +313,27 @@ export default function App() {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       subdomains: 'abcd',
       maxZoom: 20
-    }).addTo(map);
-  }, [activeTheme]);
+    }).addTo(mapInstance);
+  }, [mapInstance, activeTheme]);
 
   // Handle map centering and pan transitions
   useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !selectedHotspot) return;
+    if (!mapInstance || !selectedHotspot) return;
 
-    map.panTo([selectedHotspot.lat, selectedHotspot.lng], {
+    mapInstance.panTo([selectedHotspot.lat, selectedHotspot.lng], {
       animate: true,
       duration: 0.6
     });
-  }, [selectedHotspot]);
+  }, [mapInstance, selectedHotspot]);
 
   // Handle AI Focus bounds fitting
   useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map) return;
+    if (!mapInstance) return;
 
     if (aiFocusMode) {
       const top5 = [...INITIAL_HOTSPOTS].sort((a, b) => b.cis - a.cis).slice(0, 5);
       const bounds = L.latLngBounds(top5.map(h => [h.lat, h.lng]));
-      map.fitBounds(bounds, {
+      mapInstance.fitBounds(bounds, {
         padding: [60, 60],
         maxZoom: 14,
         animate: true,
@@ -337,12 +343,11 @@ export default function App() {
       setSelectedHotspot(top5[0]);
       setDrawerOpen(true);
     }
-  }, [aiFocusMode]);
+  }, [mapInstance, aiFocusMode]);
 
   // Render markers and layers (Layer 1: Ops, Layer 2: Congestion, Layer 3: Resources)
   useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map) return;
+    if (!mapInstance) return;
 
     // 1. Clear standard incident markers
     Object.values(markersRef.current).forEach(marker => marker.remove());
@@ -363,7 +368,7 @@ export default function App() {
         const icon = createDivIconMarker(h, isSelected);
 
         const marker = L.marker([h.lat, h.lng], { icon })
-          .addTo(map)
+          .addTo(mapInstance)
           .on('click', () => {
             setSelectedHotspot(h);
             setDrawerOpen(true);
@@ -391,7 +396,7 @@ export default function App() {
           weight: isSelected ? 3 : 1.5,
           radius: 12 + (h.capacity_loss / 3) // Sized based on capacity loss
         })
-          .addTo(map)
+          .addTo(mapInstance)
           .on('click', () => {
             setSelectedHotspot(h);
             setDrawerOpen(true);
@@ -409,7 +414,7 @@ export default function App() {
         const icon = createDivIconMarker(h, isSelected);
 
         const marker = L.marker([h.lat, h.lng], { icon })
-          .addTo(map)
+          .addTo(mapInstance)
           .on('click', () => {
             setSelectedHotspot(h);
             setDrawerOpen(true);
@@ -438,7 +443,7 @@ export default function App() {
           iconAnchor: [11, 11]
         });
 
-        const marker = L.marker([r.lat, r.lng], { icon }).addTo(map);
+        const marker = L.marker([r.lat, r.lng], { icon }).addTo(mapInstance);
         resourceMarkersRef.current.push(marker);
       });
 
@@ -455,12 +460,12 @@ export default function App() {
           weight: 2,
           dashArray: '5, 5',
           opacity: 0.8
-        }).addTo(map);
+        }).addTo(mapInstance);
         polylinesRef.current.push(line);
       });
     }
 
-  }, [filteredHotspots, activeLayer, selectedHotspot]);
+  }, [mapInstance, filteredHotspots, activeLayer, selectedHotspot]);
 
   const resetAllFilters = () => {
     setMinCis(0.0);
@@ -724,7 +729,7 @@ export default function App() {
           )}
 
           {/* Section 2: Priority Index Table */}
-          <div className="sidebar-section" style={{ flex: 1, minHeight: '220px' }}>
+          <div className="sidebar-section">
             <div className="section-header">
               <span className="section-title">Priority Index</span>
               <span className="filter-label">{filteredHotspots.length} found</span>
