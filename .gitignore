@@ -1,11 +1,15 @@
-# Python virtual environment
+# Python virtual environments
 .venv/
+backend/.venv/
 __pycache__/
+backend/__pycache__/
 *.pyc
 
 # Large data files (over GitHub's file size limit)
-jan to may police violation_anonymized791b166.csv
-preprocessed_data.pkl
+*.csv
+*.pkl
+backend/*.csv
+backend/*.pkl
 
 # IDE files
 .vscode/
