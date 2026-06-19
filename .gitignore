@@ -7,9 +7,8 @@ backend/__pycache__/
 
 # Large data files (over GitHub's file size limit)
 *.csv
-*.pkl
 backend/*.csv
-backend/*.pkl
+backend/preprocessed_data.pkl
 
 # IDE files
 .vscode/
