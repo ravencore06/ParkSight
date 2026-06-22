@@ -127,4 +127,4 @@ This repository is optimized for automated **Vercel** deployments. To host the f
 3.  Set it to: `frontend`
 4.  Click **Save** and trigger a **Redeploy**.
 
-*(Vercel will now automatically compile the Vite application inside `/frontend` and host the static dashboard at your production URL.)*
+
