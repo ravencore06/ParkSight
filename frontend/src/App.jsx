@@ -644,9 +644,11 @@ export default function App() {
       <header className="app-header">
         <div className="brand">
           <div className="brand-logo">
-            <svg width="26" height="26" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <ellipse cx="24" cy="24" rx="20" ry="6" stroke="#90caf9" strokeWidth="3" fill="none" transform="rotate(-18, 24, 24)" />
-              <path d="M18,10 h12 c4.5,0 8,3 8,8 s-3.5,8 -8,8 h-6 v12 h-6 V10 z M24,15 v6 h6 c1.5,0 2.5,-1 2.5,-3 s-1,-3 -2.5,-3 h-6 z" fill="#0072f5" />
+            <svg width="26" height="26" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Surrounding orbit ring: tilted ellipse with light blue outline */}
+              <ellipse cx="50" cy="50" rx="46" ry="12" stroke="#93c5fd" strokeWidth="9" fill="none" transform="rotate(-15, 50, 50)" opacity="0.85" />
+              {/* Bold letter P in rich blue color (#0072f5 or standard vibrant blue) */}
+              <path d="M37 18h24c13.25 0 22 8.75 22 22s-8.75 22-22 22H47v23H37V18zm10 34h14c7.73 0 12-4.27 12-12s-4.27-12-12-12H47v24z" fill="#0072f5" />
             </svg>
           </div>
           <span className="brand-name">ParkSight</span>
