@@ -33,139 +33,23 @@ import {
 } from 'recharts';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import hotspotsData from './hotspots.json';
 
-// Spatiotemporal Hotspots in Bangalore mapping
-const INITIAL_HOTSPOTS = [
-  {
-    id: 1,
-    name: "Safina Plaza Junction",
-    jurisdiction: "Shivajinagar",
-    violations: 42,
-    cis: 9.6,
-    affected_vehicles: 1240,
-    capacity_loss: 37,
-    avg_delay: 4.2,
-    economic_cost: 18500,
-    co2_impact: 145,
-    vehicle_mix: "CAR (45%), TANKER (15%), SCOOTER (40%)",
-    action: "Tow Immediately",
-    expected_improvement: 42,
-    lat: 12.9801,
-    lng: 77.6046,
-    status: "critical" // Red
-  },
-  {
-    id: 2,
-    name: "Sagar Theatre Junction",
-    jurisdiction: "Upparpet",
-    violations: 38,
-    cis: 8.7,
-    affected_vehicles: 980,
-    capacity_loss: 31,
-    avg_delay: 3.6,
-    economic_cost: 14600,
-    co2_impact: 110,
-    vehicle_mix: "CAR (30%), LGV (25%), SCOOTER (45%)",
-    action: "Deploy Officers",
-    expected_improvement: 24,
-    lat: 12.9775,
-    lng: 77.5772,
-    status: "active" // Blue
-  },
-  {
-    id: 3,
-    name: "18th Main Road, Block 2",
-    jurisdiction: "Koramangala",
-    violations: 29,
-    cis: 7.9,
-    affected_vehicles: 850,
-    capacity_loss: 25,
-    avg_delay: 2.8,
-    economic_cost: 11200,
-    co2_impact: 85,
-    vehicle_mix: "CAR (65%), SCOOTER (35%)",
-    action: "Deploy Officers",
-    expected_improvement: 18,
-    lat: 12.9329,
-    lng: 77.6143,
-    status: "active" // Blue
-  },
-  {
-    id: 4,
-    name: "Modi Hospital Junction",
-    jurisdiction: "Vijayanagara",
-    violations: 24,
-    cis: 7.4,
-    affected_vehicles: 720,
-    capacity_loss: 20,
-    avg_delay: 2.3,
-    economic_cost: 8900,
-    co2_impact: 68,
-    vehicle_mix: "CAR (25%), PASSENGER AUTO (40%), SCOOTER (35%)",
-    action: "Deploy Officers",
-    expected_improvement: 15,
-    lat: 12.9863,
-    lng: 77.5385,
-    status: "active" // Blue
-  },
-  {
-    id: 5,
-    name: "HAL Airport Exit",
-    jurisdiction: "HAL Old Airport",
-    violations: 49,
-    cis: 9.2,
-    affected_vehicles: 1420,
-    capacity_loss: 41,
-    avg_delay: 4.8,
-    economic_cost: 21500,
-    co2_impact: 165,
-    vehicle_mix: "CAR (55%), MAXI-CAB (20%), SCOOTER (25%)",
-    action: "Tow Immediately",
-    expected_improvement: 38,
-    lat: 12.9592,
-    lng: 77.6444,
-    status: "critical" // Red
-  },
-  {
-    id: 6,
-    name: "KR Market Main Gate",
-    jurisdiction: "City Market",
-    violations: 33,
-    cis: 8.1,
-    affected_vehicles: 1150,
-    capacity_loss: 28,
-    avg_delay: 3.1,
-    economic_cost: 13200,
-    co2_impact: 102,
-    vehicle_mix: "GOODS AUTO (40%), PRIVATE BUS (30%), SCOOTER (30%)",
-    action: "Deploy Officers",
-    expected_improvement: 22,
-    lat: 12.9667,
-    lng: 77.5750,
-    status: "active" // Blue
-  },
-  {
-    id: 7,
-    name: "Modi Bridge Road Link",
-    jurisdiction: "Malleshwaram",
-    violations: 18,
-    cis: 6.2,
-    affected_vehicles: 510,
-    capacity_loss: 15,
-    avg_delay: 1.6,
-    economic_cost: 5800,
-    co2_impact: 42,
-    vehicle_mix: "CAR (40%), SCOOTER (60%)",
-    action: "Routine Patrol",
-    expected_improvement: 8,
-    lat: 12.9984,
-    lng: 77.5714,
-    status: "neutral" // Grey
-  }
-];
+// Helper to calculate distance between two coordinates in km (Haversine formula)
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
 
-// Mock road data for the premium Traffic Layer
-const TRAFFIC_ROADS = [
+// Mock road data for the premium Traffic Layer (base without hardcoded hotspots)
+const TRAFFIC_ROADS_BASE = [
   {
     id: "R1",
     name: "MG Road Corridor",
@@ -175,7 +59,6 @@ const TRAFFIC_ROADS = [
     congestion: "orange",
     affected_vehicles: 1240,
     estimated_delay: 4.2,
-    nearby_hotspots: ["Safina Plaza Junction"],
     parking_suspected: true
   },
   {
@@ -187,7 +70,6 @@ const TRAFFIC_ROADS = [
     congestion: "red",
     affected_vehicles: 980,
     estimated_delay: 5.6,
-    nearby_hotspots: ["Sagar Theatre Junction"],
     parking_suspected: true
   },
   {
@@ -199,7 +81,6 @@ const TRAFFIC_ROADS = [
     congestion: "yellow",
     affected_vehicles: 850,
     estimated_delay: 2.1,
-    nearby_hotspots: ["18th Main Road, Block 2"],
     parking_suspected: false
   },
   {
@@ -211,7 +92,6 @@ const TRAFFIC_ROADS = [
     congestion: "dark-red",
     affected_vehicles: 1420,
     estimated_delay: 8.5,
-    nearby_hotspots: ["HAL Airport Exit"],
     parking_suspected: true
   },
   {
@@ -223,7 +103,6 @@ const TRAFFIC_ROADS = [
     congestion: "green",
     affected_vehicles: 510,
     estimated_delay: 0.5,
-    nearby_hotspots: ["Modi Bridge Road Link"],
     parking_suspected: false
   },
   {
@@ -235,7 +114,6 @@ const TRAFFIC_ROADS = [
     congestion: "orange",
     affected_vehicles: 720,
     estimated_delay: 3.2,
-    nearby_hotspots: ["Modi Hospital Junction"],
     parking_suspected: true
   }
 ];
@@ -257,9 +135,69 @@ const createDivIconMarker = (hotspot, isSelected) => {
 };
 
 export default function App() {
-  const [selectedHotspot, setSelectedHotspot] = useState(INITIAL_HOTSPOTS[0]);
+  const [hotspotsList, setHotspotsList] = useState(hotspotsData);
+  const [selectedHotspot, setSelectedHotspot] = useState(hotspotsData[0]);
   const [selectedRoad, setSelectedRoad] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
+
+  // Shadow INITIAL_HOTSPOTS so all hooks and rendering use the fetched hotspots list
+  const INITIAL_HOTSPOTS = hotspotsList;
+
+  // Shadow TRAFFIC_ROADS dynamically linking to nearest active hotspots using physical coordinates
+  const TRAFFIC_ROADS = useMemo(() => {
+    return TRAFFIC_ROADS_BASE.map(road => {
+      // Find all hotspots within 1.0 km of any point in the road's path
+      const nearby = INITIAL_HOTSPOTS.filter(hotspot => {
+        return road.path.some(pt => getDistance(pt[0], pt[1], hotspot.lat, hotspot.lng) < 1.0);
+      }).map(h => h.name);
+      
+      return {
+        ...road,
+        nearby_hotspots: nearby
+      };
+    });
+  }, [INITIAL_HOTSPOTS]);
+
+  // Fetch hotspots from the backend API server
+  useEffect(() => {
+    fetch('http://localhost:5000/api/hotspots')
+      .then(res => {
+        if (!res.ok) {
+          throw new Error('API server returned error status');
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.length > 0) {
+          setHotspotsList(data);
+          setSelectedHotspot(data[0]);
+        }
+      })
+      .catch(err => {
+        console.warn("Failed to fetch hotspots from backend API, using fallback data:", err);
+      });
+  }, []);
+
+  // Dynamic divisions from the real dataset
+  const uniqueStations = useMemo(() => {
+    const stations = new Set(INITIAL_HOTSPOTS.map(h => h.jurisdiction));
+    return ["ALL", ...Array.from(stations).sort()];
+  }, []);
+
+  // Dynamic Traffic Dashboard Stats calculated from TRAFFIC_ROADS
+  const avgNetworkSpeed = useMemo(() => {
+    return (TRAFFIC_ROADS.reduce((sum, r) => sum + r.speed, 0) / TRAFFIC_ROADS.length).toFixed(1);
+  }, []);
+
+  const criticalCorridorName = useMemo(() => {
+    const sorted = [...TRAFFIC_ROADS].sort((a, b) => a.speed - b.speed);
+    return sorted[0] ? sorted[0].name : "N/A";
+  }, []);
+
+  const highDelayCorridorText = useMemo(() => {
+    const sorted = [...TRAFFIC_ROADS].sort((a, b) => b.estimated_delay - a.estimated_delay);
+    return sorted[0] ? `${sorted[0].name} (+${sorted[0].estimated_delay}m)` : "N/A";
+  }, []);
   
   // UI Layer, Theme and Search States
   const [activeLayer, setActiveLayer] = useState('operations'); // operations | congestion | enforcement
@@ -551,12 +489,21 @@ export default function App() {
         resourceMarkersRef.current.push(marker);
       });
 
-      // Draw optimized patrol route lines connecting officers to target junctions
-      const routes = [
-        { from: [12.9820, 77.6010], to: [12.9801, 77.6046], color: 'var(--accent-blue)' }, // Officer 1 to Safina Plaza
-        { from: [12.9750, 77.5810], to: [12.9775, 77.5772], color: 'var(--accent-blue)' }, // Officer 2 to Sagar Theatre
-        { from: [12.9560, 77.6410], to: [12.9592, 77.6444], color: 'var(--warning-orange)' } // Tow Truck 1 to HAL
-      ];
+      // Draw optimized patrol route lines connecting officers to target junctions dynamically
+      // Find top hotspots sorted by CIS dynamically to avoid hardcoded names
+      const sortedByCis = [...INITIAL_HOTSPOTS].sort((a, b) => b.cis - a.cis);
+      const targetHotspots = sortedByCis.slice(0, 3);
+
+      const routes = [];
+      if (targetHotspots.length > 0) {
+        routes.push({ from: [12.9820, 77.6010], to: [targetHotspots[0].lat, targetHotspots[0].lng], color: 'var(--accent-blue)' }); // Officer 1 to Top 1 Hotspot
+      }
+      if (targetHotspots.length > 1) {
+        routes.push({ from: [12.9750, 77.5810], to: [targetHotspots[1].lat, targetHotspots[1].lng], color: 'var(--accent-blue)' }); // Officer 2 to Top 2 Hotspot
+      }
+      if (targetHotspots.length > 2) {
+        routes.push({ from: [12.9560, 77.6410], to: [targetHotspots[2].lat, targetHotspots[2].lng], color: 'var(--warning-orange)' }); // Tow Truck 1 to Top 3 Hotspot
+      }
 
       routes.forEach(route => {
         const line = L.polyline([route.from, route.to], {
@@ -682,30 +629,13 @@ export default function App() {
   };
 
   // Recharts trend data
-  const trendData = useMemo(() => [
-    { name: '08:00', CIS: 7.2 },
-    { name: '10:00', CIS: parseFloat((selectedHotspot ? selectedHotspot.cis : 9.6).toFixed(1)) },
-    { name: '12:00', CIS: 8.1 },
-    { name: '14:00', CIS: 7.4 },
-    { name: '16:00', CIS: 8.7 },
-    { name: '18:00', CIS: 9.2 },
-    { name: '20:00', CIS: 7.9 }
-  ], [selectedHotspot]);
+  const trendData = useMemo(() => {
+    return selectedHotspot ? selectedHotspot.trend_data : [];
+  }, [selectedHotspot]);
 
   // Recharts vehicle mix breakdown
   const barChartData = useMemo(() => {
-    if (!selectedHotspot) return [];
-    const parts = selectedHotspot.vehicle_mix.split(', ');
-    return parts.map(p => {
-      const match = p.match(/([A-Z\s-]+)\s*\((\d+)%\)/);
-      if (match) {
-        return {
-          name: match[1].trim(),
-          percentage: parseInt(match[2])
-        };
-      }
-      return { name: p, percentage: 0 };
-    });
+    return selectedHotspot ? selectedHotspot.vehicle_mix_data : [];
   }, [selectedHotspot]);
 
   return (
@@ -821,14 +751,11 @@ export default function App() {
                   onChange={(e) => setFilterStation(e.target.value)}
                   disabled={aiFocusMode}
                 >
-                  <option value="ALL">All Divisions</option>
-                  <option value="Shivajinagar">Shivajinagar</option>
-                  <option value="Upparpet">Upparpet</option>
-                  <option value="Koramangala">Koramangala</option>
-                  <option value="Vijayanagara">Vijayanagara</option>
-                  <option value="City Market">City Market</option>
-                  <option value="Malleshwaram">Malleshwaram</option>
-                  <option value="HAL Old Airport">HAL Airport</option>
+                  {uniqueStations.map(station => (
+                    <option key={station} value={station}>
+                      {station === "ALL" ? "All Divisions" : station}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1003,15 +930,15 @@ export default function App() {
           <div className="traffic-chips-container">
             <div className="traffic-chip">
               <span className="traffic-chip-label">Avg Network Speed</span>
-              <span className="traffic-chip-value mono">24.8 km/h</span>
+              <span className="traffic-chip-value mono">{avgNetworkSpeed} km/h</span>
             </div>
             <div className="traffic-chip">
               <span className="traffic-chip-label">Critical Corridor</span>
-              <span className="traffic-chip-value red-text">HAL Airport Rd</span>
+              <span className="traffic-chip-value red-text">{criticalCorridorName}</span>
             </div>
             <div className="traffic-chip">
               <span className="traffic-chip-label">High Delay Zone</span>
-              <span className="traffic-chip-value orange-text">K.G. Road (+5.6m)</span>
+              <span className="traffic-chip-value orange-text">{highDelayCorridorText}</span>
             </div>
           </div>
 
@@ -1041,7 +968,7 @@ export default function App() {
             <div className="ai-impact-overlay-banner">
               <span className="ai-overlay-badge">AI Focus Active</span>
               <span className="ai-overlay-text">
-                Top 5 critical bottlenecks targeted. Expected delay reduction: <b>+38.5%</b>
+                Top 5 critical bottlenecks targeted. Expected delay reduction: <b>+{ (filteredHotspots.slice(0, 5).reduce((sum, h) => sum + h.expected_improvement, 0) / Math.max(1, filteredHotspots.slice(0, 5).length)).toFixed(1) }%</b>
               </span>
             </div>
           )}
@@ -1136,6 +1063,40 @@ export default function App() {
                     <p className="action-text-detail">{selectedHotspot.action} immediately. Restores traffic throughput flow.</p>
                   </div>
 
+                  {/* Explainability Engine: Why this recommendation? */}
+                  <div className="explainability-card" style={{ marginTop: '16px', marginBottom: '16px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px' }}>
+                    <span className="drawer-section-title" style={{ marginTop: 0, marginBottom: '8px', display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Why this recommendation?</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px', marginBottom: '10px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Violations:</span>
+                        <div className="mono font-semibold">{selectedHotspot.violations.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Peak Hour:</span>
+                        <div className="mono font-semibold">{selectedHotspot.peak_hour}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Vehicle Mix:</span>
+                        <div style={{ fontWeight: 500 }}>{selectedHotspot.vehicle_mix_data.slice(0, 2).map(v => `${v.name} (${Math.round(v.percentage)}%)`).join(', ')}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Normalized CIS:</span>
+                        <div className="mono font-semibold" style={{ color: 'var(--accent-blue)' }}>{selectedHotspot.cis} / 10</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '11px', lineHeight: '1.4', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Reason:</span>{' '}
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        {selectedHotspot.cis >= 8.0 
+                          ? "Critical bottleneck showing extreme peak-hour congestion and heavy vehicle footprint. Immediate towing enforcement required."
+                          : selectedHotspot.cis >= 5.0 
+                          ? "High violation density and sustained peak-hour concentration. Scheduled officer deployment recommended to clear transit capacity."
+                          : "Routine patrol. Minor parking friction with low baseline delay impact."
+                        }
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Section: Metrics Grid */}
                   <div>
                     <h3 className="drawer-section-title">Incident Parameters</h3>
@@ -1169,7 +1130,14 @@ export default function App() {
                   <div>
                     <h3 className="drawer-section-title">Enforcement Simulator</h3>
                     <div className="sim-drawer-card">
-                      <div className="sim-slider-label">
+                      <div style={{ fontSize: '11px', marginBottom: '10px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Current Situation:</div>
+                        <div style={{ color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                          Active obstruction causing an average delay of <b>{selectedHotspot.avg_delay} min</b> per vehicle, affecting <b>{selectedHotspot.affected_vehicles} vehicles/hr</b> and incurring a daily economic loss rate of <b>₹{selectedHotspot.economic_cost.toLocaleString()}</b>.
+                        </div>
+                      </div>
+
+                      <div className="sim-slider-label" style={{ marginTop: '12px' }}>
                         <span>Compliance Target Rate</span>
                         <span><b>{complianceRate}%</b></span>
                       </div>
@@ -1182,27 +1150,22 @@ export default function App() {
                         onChange={(e) => setComplianceRate(parseInt(e.target.value))}
                         className="slider-input"
                       />
-                      <div className="sim-comparison-grid">
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
                         <div className="sim-comparison-box">
-                          <span className="sim-comp-title">Delay Baseline</span>
-                          <span className="sim-comp-val">{selectedHotspot.avg_delay} min</span>
+                          <span className="sim-comp-title">Expected Max Improvement</span>
+                          <span className="sim-comp-val" style={{ color: 'var(--accent-blue)' }}>+{selectedHotspot.expected_improvement}%</span>
                         </div>
                         <div className="sim-comparison-box">
-                          <span className="sim-comp-title">Delay (Simulated)</span>
-                          <span className="sim-comp-val simulated-impact">
-                            {(selectedHotspot.avg_delay * complianceFactor).toFixed(1)} min
+                          <span className="sim-comp-title">Simulated Realized Recovery</span>
+                          <span className="sim-comp-val simulated-impact" style={{ color: 'var(--success-green)' }}>
+                            +{Math.round(selectedHotspot.expected_improvement * (complianceRate / 100))}%
                           </span>
                         </div>
-                        <div className="sim-comparison-box">
-                          <span className="sim-comp-title">Expected Recovery</span>
-                          <span className="sim-comp-val">0.0%</span>
-                        </div>
-                        <div className="sim-comparison-box">
-                          <span className="sim-comp-title">Recovery (Simulated)</span>
-                          <span className="sim-comp-val simulated-impact">
-                            {Math.round(selectedHotspot.expected_improvement * (complianceRate / 100))}%
-                          </span>
-                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '6px', lineHeight: '1.3' }}>
+                        <b>Estimation Model Reasoning:</b> Expected improvement is dynamically modeled as min(50%, Normalized CIS &times; 5) scaled by target enforcement compliance.
                       </div>
                     </div>
                   </div>
